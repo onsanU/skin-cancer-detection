@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>操作日志 · 皮肤癌检测系统管理后台</title>
+  <link rel="stylesheet" href="vendor/adminlte/css/adminlte.min.css">
+  <link rel="stylesheet" href="vendor/bootstrap-icons/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="vendor/overlayscrollbars/overlayscrollbars.min.css">
+  <style>
+    .tbl-sm td, .tbl-sm th { font-size: 13px; vertical-align: middle; }
+    .tbl-sm.table-striped > tbody > tr:nth-of-type(odd) > * { background: rgba(255,255,255,.03); }
+    .tbl-sm.table-striped > tbody > tr > * { border-color: rgba(255,255,255,.08); }
+    .table-light { --bs-table-bg: rgba(255,255,255,.06); --bs-table-color: var(--bs-body-color); }
+    .act-chip { font-size: 11px; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+    .mono { font-family: Consolas, Monaco, monospace; font-size: 12px; }
+    .dt { font-family: Consolas, Monaco, monospace; font-size: 12px; white-space: nowrap; }
+    .path-cell { max-width: 240px; overflow: hidden; text-overflow: ellipsis;
+                 white-space: nowrap; display: inline-block; vertical-align: bottom; }
+  </style>
+</head>
+<body class="layout-fixed sidebar-expand-lg bg-body-tertiary">
+<div id="app-content">
+
+  <!-- 说明 -->
+  <div class="alert alert-info d-flex align-items-start mb-3">
+    <i class="bi bi-journal-check fs-4 me-2"></i>
+    <div>
+      <strong>操作日志（审计追踪）</strong>
+      <div class="small mb-0">
+        系统对管理端的<strong>所有写操作</strong>自动记日志，管理员无法关闭或删除。
+        记录包含：操作者、动作、目标对象、变更详情、IP、状态码与耗时 ——
+        用于追溯「谁在何时对什么做了什么」，医疗数据处理场景下属于必要合规能力。
+        <span class="text-warning">失败的越权尝试同样会被记录。</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 概览 -->
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+      <div class="card h-100"><div class="card-body py-3">
+        <div class="text-secondary small">日志总数</div>
+        <div class="fs-4 fw-bold" id="s-total">—</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card h-100"><div class="card-body py-3">
+        <div class="text-secondary small">今日操作</div>
+        <div class="fs-4 fw-bold" id="s-today">—</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card h-100"><div class="card-body py-3">
+        <div class="text-secondary small">失败/被拒</div>
+        <div class="fs-4 fw-bold text-warning" id="s-failed">—</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card h-100"><div class="card-body py-3">
+        <div class="text-secondary small">操作者数</div>
+        <div class="fs-4 fw-bold" id="s-admins">—</div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- 筛选 -->
+  <div class="card mb-3"><div class="card-body py-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label small mb-1">动作类型</label>
+        <select class="form-select form-select-sm" id="f-action">
+          <option value="">全部动作</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small mb-1">目标类型</label>
+        <select class="form-select form-select-sm" id="f-target">
+          <option value="">全部</option>
+          <option value="user">用户</option>
+          <option value="record">检测记录</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small mb-1">关键词</label>
+        <input class="form-control form-control-sm" id="f-keyword"
+               placeholder="操作者 / 目标 / 详情 / 路径">
+      </div>
+      <div class="col-md-4 d-flex gap-2">
+        <button class="btn btn-sm btn-primary" id="btn-search">
+          <i class="bi bi-search"></i> 查询</button>
+        <button class="btn btn-sm btn-outline-secondary" id="btn-reset">
+          <i class="bi bi-arrow-counterclockwise"></i> 重置</button>
+        <button class="btn btn-sm btn-outline-primary ms-auto" id="btn-refresh">
+          <i class="bi bi-arrow-clockwise"></i> 刷新</button>
+      </div>
+    </div>
+  </div></div>
+
+  <!-- 列表 -->
+  <div class="card">
+    <div class="card-header d-flex align-items-center justify-content-between">
+      <div>
+        <i class="bi bi-list-ul"></i> 日志列表
+        <span class="badge text-bg-secondary ms-1" id="l-count">—</span>
+      </div>
+      <div class="small text-secondary" id="l-page">—</div>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover tbl-sm mb-0">
+          <thead class="table-light">
+            <tr>
+              <th style="width:64px">ID</th>
+              <th style="width:150px">时间</th>
+              <th style="width:130px">操作者</th>
+              <th style="width:150px">动作</th>
+              <th>目标</th>
+              <th>详情</th>
+              <th style="width:110px">结果</th>
+              <th style="width:120px">IP</th>
+              <th style="width:80px">耗时</th>
+            </tr>
+          </thead>
+          <tbody id="l-body">
+            <tr><td colspan="9" class="text-center text-secondary py-4">加载中…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card-footer d-flex align-items-center justify-content-between">
+      <div class="small text-secondary" id="l-hint">—</div>
+      <div class="btn-group btn-group-sm">
+        <button class="btn btn-outline-secondary" id="btn-prev">
+          <i class="bi bi-chevron-left"></i> 上一页</button>
+        <button class="btn btn-outline-secondary" id="btn-next">
+          下一页 <i class="bi bi-chevron-right"></i></button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="vendor/adminlte/js/adminlte.min.js"></script>
+<script src="admin.js"></script>
+<script>
+(function () {
+  'use strict';
+  if (!Admin.guardAdmin()) return;
+  Admin.renderLayout('logs.html', '操作日志');
+
+  const PAGE = 50;
+  let offset = 0, total = 0, allItems = [];
+
+  const $ = (id) => document.getElementById(id);
+
+  // ---------- 动作下拉 ----------
+  async function loadActions() {
+    try {
+      const d = await Admin.api('/logs/actions');
+      const sel = $('f-action');
+      (d.items || []).forEach((it) => {
+        const o = document.createElement('option');
+        o.value = it.action;
+        o.textContent = `${it.label}（${it.count}）`;
+        sel.appendChild(o);
+      });
+    } catch (e) { /* 下拉失败不影响主列表 */ }
+  }
+
+  // ---------- 列表 ----------
+  async function load() {
+    const qs = new URLSearchParams({ limit: PAGE, offset });
+    const a = $('f-action').value, t = $('f-target').value, k = $('f-keyword').value.trim();
+    if (a) qs.set('action', a);
+    if (t) qs.set('target_type', t);
+    if (k) qs.set('keyword', k);
+
+    $('l-body').innerHTML = '<tr><td colspan="9" class="text-center text-secondary py-4">加载中…</td></tr>';
+    try {
+      const d = await Admin.api('/logs?' + qs.toString());
+      total = d.total || 0;
+      allItems = d.items || [];
+      render();
+      updateOverview();
+    } catch (e) {
+      $('l-body').innerHTML = '<tr><td colspan="9" class="text-center text-danger py-4">'
+        + '加载失败：' + Admin.esc(e.message || String(e)) + '</td></tr>';
+    }
+  }
+
+  function actionColor(action) {
+    if (action.startsWith('user.role')) return 'text-bg-danger';
+    if (action.startsWith('user.password')) return 'text-bg-warning';
+    if (action.startsWith('user.active')) return 'text-bg-info';
+    if (action.startsWith('record.delete') || action.startsWith('user.records')) return 'text-bg-secondary';
+    return 'text-bg-primary';
+  }
+
+  function render() {
+    const tb = $('l-body');
+    if (!allItems.length) {
+      tb.innerHTML = '<tr><td colspan="9" class="text-center text-secondary py-4">暂无日志</td></tr>';
+    } else {
+      tb.innerHTML = allItems.map((it) => {
+        const okBadge = it.ok
+          ? '<span class="badge text-bg-success">成功</span>'
+          : `<span class="badge text-bg-warning">${it.status_code}</span>`;
+        const tgt = it.target_name
+          ? `${Admin.esc(it.target_name)}<span class="text-secondary small ms-1">#${it.target_id ?? ''}</span>`
+          : (it.target_id != null ? '#' + it.target_id : '—');
+        return `<tr>
+          <td class="text-secondary">${it.id}</td>
+          <td class="dt">${(it.created_at || '').replace('T', ' ').slice(0, 19)}</td>
+          <td><i class="bi bi-person-circle me-1 text-secondary"></i>${Admin.esc(it.admin_name)}</td>
+          <td><span class="act-chip ${actionColor(it.action)}">${Admin.esc(it.action_label)}</span></td>
+          <td>${tgt}</td>
+          <td class="text-secondary small">${Admin.esc(it.detail || '')}</td>
+          <td>${okBadge}</td>
+          <td class="mono text-secondary">${Admin.esc(it.ip || '')}</td>
+          <td class="mono text-secondary">${it.elapsed_ms != null ? it.elapsed_ms + 'ms' : '—'}</td>
+        </tr>`;
+      }).join('');
+    }
+    const from = total ? offset + 1 : 0;
+    const to = Math.min(offset + PAGE, total);
+    $('l-count').textContent = total + ' 条';
+    $('l-page').textContent = `第 ${Math.floor(offset / PAGE) + 1} 页`;
+    $('l-hint').textContent = `显示 ${from}-${to} / 共 ${total} 条`;
+    $('btn-prev').disabled = offset === 0;
+    $('btn-next').disabled = offset + PAGE >= total;
+  }
+
+  // ---------- 概览（拉一批样本统计，仅首次） ----------
+  let overviewLoaded = false;
+  async function updateOverview() {
+    if (overviewLoaded) return;
+    try {
+      const d = await Admin.api('/logs?limit=200');
+      const items = d.items || [];
+      const today = new Date().toISOString().slice(0, 10);
+      $('s-total').textContent = d.total ?? 0;
+      $('s-today').textContent = items.filter((x) => (x.created_at || '').slice(0, 10) === today).length;
+      $('s-failed').textContent = items.filter((x) => !x.ok).length;
+      $('s-admins').textContent = new Set(items.map((x) => x.admin_name)).size;
+      overviewLoaded = true;
+    } catch (e) { /* ignore */ }
+  }
+
+  // ---------- 事件 ----------
+  $('btn-search').onclick = () => { offset = 0; load(); };
+  $('btn-reset').onclick = () => {
+    $('f-action').value = ''; $('f-target').value = ''; $('f-keyword').value = '';
+    offset = 0; load();
+  };
+  $('btn-refresh').onclick = () => { overviewLoaded = false; load(); };
+  $('btn-prev').onclick = () => { if (offset > 0) { offset = Math.max(0, offset - PAGE); load(); } };
+  $('btn-next').onclick = () => { if (offset + PAGE < total) { offset += PAGE; load(); } };
+  $('f-keyword').addEventListener('keydown', (e) => { if (e.key === 'Enter') { offset = 0; load(); } });
+
+  loadActions();
+  load();
+})();
+</script>
+</body>
+</html>

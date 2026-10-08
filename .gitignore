@@ -1,0 +1,64 @@
+# ============================================
+# 皮肤癌图像检测系统 .gitignore
+# 原则：只提交源码+文档，不提交数据/模型/依赖/产物
+# ============================================
+
+# === 数据集（体积大，用 data_scripts/ 重新下载生成）===
+dataset/
+data/
+
+# === 模型权重（体积大，训练脚本可复现）===
+models_*/
+models/
+*.pt
+*.pth
+*.onnx
+*.ckpt
+*.safetensors
+
+# === 用户上传 & 运行时数据 ===
+backend/uploads/
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
+logs/
+*.log
+
+# === 交付包（不随代码库分发）===
+交付文件/
+
+# === Node 依赖与构建产物 ===
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# === Python ===
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# === 备份/临时文件 ===
+*.bak
+*.bak_*
+*.bak-*
+*.orig
+*.rej
+*~
+
+# === 编辑器/系统 ===
+.obsidian/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# === 密钥/环境 ===
+.env
+.env.local
+*.key
+*.pem

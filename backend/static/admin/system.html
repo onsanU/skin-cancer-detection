@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>系统状态 · 皮肤癌检测系统管理后台</title>
+  <link rel="stylesheet" href="vendor/adminlte/css/adminlte.min.css">
+  <link rel="stylesheet" href="vendor/bootstrap-icons/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="vendor/overlayscrollbars/overlayscrollbars.min.css">
+  <style>
+    /* ===== 暗色主题：背景暗色 + 白字 + 重点保持红/绿/蓝 ===== */
+    .kv td, .kv th { font-size: 13px; vertical-align: middle; }
+    .kv th { width: 190px; color: var(--bs-secondary-color); font-weight: 500; }
+    /* 路径/代码：亮色文字，融入暗色卡片 */
+    code.path { font-size: 11.5px; word-break: break-all; background: transparent;
+                padding: 0; color: #7cc4e8; font-weight: 500; }
+    code { color: #6fb3d9; }
+    .status-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block;
+                  margin-right: 6px; }
+    .dot-ok { background: #27ae60; box-shadow: 0 0 6px rgba(39,174,96,.7); }
+    .dot-bad { background: #e74c3c; box-shadow: 0 0 6px rgba(231,76,60,.7); }
+    .big-icon { font-size: 30px; }
+    /* 表格：暗色下边框与条纹都用低透明度叠加，避免割裂 */
+    .kv.table-striped > tbody > tr:nth-of-type(odd) > * {
+      background: rgba(255,255,255,.03);
+    }
+    .kv.table-striped > tbody > tr > * { border-color: rgba(255,255,255,.08); }
+    .table-light { --bs-table-bg: rgba(255,255,255,.06); --bs-table-color: var(--bs-body-color); }
+  </style>
+</head>
+<body class="layout-fixed sidebar-expand-lg bg-body-tertiary">
+<div id="app-content">
+  <!-- 顶部状态条 -->
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3">
+      <div class="card h-100"><div class="card-body py-3 d-flex align-items-center">
+        <i class="bi bi-activity big-icon me-3 text-primary"></i>
+        <div><div class="h5 mb-0" id="st-service">检查中</div>
+        <div class="text-muted small" id="st-uptime">服务运行时长</div></div>
+      </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="card h-100"><div class="card-body py-3 d-flex align-items-center">
+        <i class="bi bi-cpu big-icon me-3" id="st-model-icon"></i>
+        <div><div class="h5 mb-0" id="st-model">—</div>
+        <div class="text-muted small">良恶性模型</div></div>
+      </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="card h-100"><div class="card-body py-3 d-flex align-items-center">
+        <i class="bi bi-diagram-3 big-icon me-3" id="st-type-icon"></i>
+        <div><div class="h5 mb-0" id="st-type">—</div>
+        <div class="text-muted small">7 类类型模型</div></div>
+      </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="card h-100"><div class="card-body py-3 d-flex align-items-center">
+        <i class="bi bi-hdd big-icon me-3 text-info"></i>
+        <div><div class="h5 mb-0" id="st-disk">—</div>
+        <div class="text-muted small">磁盘可用空间</div></div>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <!-- 全站模型清单：系统实际依赖的全部模型（不止图像检测） -->
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h3 class="card-title mb-0">
+            <i class="bi bi-boxes me-1"></i> 全站模型清单
+            <span class="badge text-bg-secondary ms-1" id="allModelsBadge">—</span>
+          </h3>
+          <span class="text-muted small">
+            <i class="bi bi-info-circle me-1"></i>系统实际加载的全部模型（图像检测 + 医疗问答）
+          </span>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table kv table-striped mb-0">
+              <thead class="table-light"><tr>
+                <th style="width:60px">状态</th>
+                <th style="width:200px">用途</th>
+                <th>模型 / 文件</th>
+                <th style="width:140px">推理后端</th>
+                <th style="width:90px">设备</th>
+                <th>说明</th>
+              </tr></thead>
+              <tbody id="allModelsTable">
+                <tr><td colspan="6" class="text-center text-muted py-4">加载中…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <!-- 模型信息 -->
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-header"><h3 class="card-title mb-0">
+          <i class="bi bi-cpu me-1"></i> 模型运行时（图像良恶性主判定）</h3></div>
+        <div class="card-body p-0">
+          <table class="table kv table-striped mb-0"><tbody id="modelTable">
+            <tr><td colspan="2" class="text-center text-muted py-4">加载中…</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+    <!-- 集成配置 -->
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-header"><h3 class="card-title mb-0">
+          <i class="bi bi-diagram-2 me-1"></i> 推理配置</h3></div>
+        <div class="card-body p-0">
+          <table class="table kv table-striped mb-0"><tbody id="cfgTable">
+            <tr><td colspan="2" class="text-center text-muted py-4">加载中…</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+    <!-- 数据库与存储 -->
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h3 class="card-title mb-0">
+            <i class="bi bi-database me-1"></i> 数据库与存储</h3>
+          <span class="badge" id="db-backend-badge">—</span>
+        </div>
+        <div class="card-body p-0">
+          <table class="table kv table-striped mb-0"><tbody id="dbTable">
+            <tr><td colspan="2" class="text-center text-muted py-4">加载中…</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+    <!-- 磁盘占用 -->
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-header"><h3 class="card-title mb-0">
+          <i class="bi bi-device-hdd me-1"></i> 磁盘占用</h3></div>
+        <div class="card-body" id="diskBox">
+          <div class="text-muted text-center py-4">加载中…</div>
+        </div>
+      </div>
+    </div>
+    <!-- 数据库切换（只读展示 + 复制命令，不做运行时热切换） -->
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h3 class="card-title mb-0">
+            <i class="bi bi-arrow-left-right me-1"></i> 数据库后端切换</h3>
+          <span class="text-muted" style="font-size:12px">
+            切换需重启服务（配置在启动时读取）</span>
+        </div>
+        <div class="card-body">
+          <div class="row g-3" id="dbSwitch">
+            <div class="col-md-6"><div class="text-muted text-center py-4">加载中…</div></div>
+          </div>
+          <div class="alert alert-warning mb-0 mt-3 py-2" style="font-size:12.5px">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            <b>切换注意：</b>两个库的数据<b>相互独立、不自动同步</b>。
+            在 SQLite 模式下产生的检测记录只写入 SQLite，切换后看不到；
+            反之亦然。切换前请确认数据已迁移或另作备份。
+            <br>MySQL 库为独立库 <code>skin_cancer</code>，与医小喵项目的 <code>yixiaomiao</code> 库完全隔离。
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- 阈值预设 -->
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header"><h3 class="card-title mb-0">
+          <i class="bi bi-sliders me-1"></i> 判定阈值预设（前端可切换的工作模式）</h3></div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table kv table-striped mb-0">
+              <thead class="table-light"><tr>
+                <th style="width:120px">模式</th><th style="width:100px">阈值</th>
+                <th>说明</th></tr></thead>
+              <tbody id="thresholdTable">
+                <tr><td colspan="3" class="text-center text-muted py-4">加载中…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/adminlte/js/bootstrap.bundle.min.js"></script>
+<script src="vendor/adminlte/js/adminlte.min.js"></script>
+<script src="admin.js"></script>
+<script>
+if (Admin.guardAdmin()) {
+  Admin.renderLayout('system.html', '系统状态');
+  load();
+  setInterval(load, 30000);   // 30 秒自动刷新
+}
+
+function row(k, v) {
+  return '<tr><th>' + k + '</th><td>' + v + '</td></tr>';
+}
+
+/**
+ * 全站模型清单：把系统实际加载的所有模型列出来
+ * 分组：图像检测（主判定 + 7类参考）/ 医疗问答（文本 + 看图）
+ */
+function renderAllModels(list, ollama) {
+  const tb = document.getElementById('allModelsTable');
+  const badge = document.getElementById('allModelsBadge');
+  if (!list.length) {
+    tb.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">暂无模型信息</td></tr>';
+    badge.textContent = '—';
+    return;
+  }
+  const readyN = list.filter(x => x.ready).length;
+  badge.textContent = readyN + ' / ' + list.length + ' 就绪';
+  badge.className = 'badge ms-1 ' + (readyN === list.length ? 'text-bg-success'
+    : readyN ? 'text-bg-warning' : 'text-bg-danger');
+
+  const GRP = { image: '图像检测', chat: '医疗问答' };
+  let lastGroup = null;
+  tb.innerHTML = list.map(m => {
+    // 分组分隔行（同组内不重复出现）
+    let groupRow = '';
+    if (m.group !== lastGroup) {
+      lastGroup = m.group;
+      groupRow = '<tr><td colspan="6" class="py-1 px-3" style="background:rgba(255,255,255,.04)">' +
+        '<span class="small text-secondary fw-semibold">' +
+        '<i class="bi bi-' + (m.group === 'image' ? 'images' : 'chat-dots') + ' me-1"></i>' +
+        (GRP[m.group] || m.group) + '</span></td></tr>';
+    }
+    const dot = m.ready
+      ? '<span class="badge text-bg-success">就绪</span>'
+      : '<span class="badge text-bg-danger">未就绪</span>';
+    const dev = m.device === 'cuda' ? '<span class="badge text-bg-dark">GPU</span>'
+      : m.device === 'cpu' ? '<span class="badge text-bg-secondary">CPU</span>'
+      : '<code>' + Admin.esc(m.device || '—') + '</code>';
+    return groupRow +
+      '<tr>' +
+      '<td>' + dot + '</td>' +
+      '<td class="small">' + Admin.esc(m.role || '—') + '</td>' +
+      '<td><code class="path">' + Admin.esc(m.name || '—') + '</code></td>' +
+      '<td><code>' + Admin.esc(m.backend || '—') + '</code></td>' +
+      '<td>' + dev + '</td>' +
+      '<td class="small text-muted">' + Admin.esc(m.detail || '') + '</td>' +
+      '</tr>';
+  }).join('') + (ollama.online === false
+    ? '<tr><td colspan="6" class="small text-warning px-3 py-2">' +
+      '<i class="bi bi-exclamation-triangle me-1"></i>' +
+      'Ollama 未运行（' + Admin.esc(ollama.endpoint || '') + '）—— 医疗问答不可用，图像检测不受影响' +
+      '</td></tr>' : '');
+}
+
+/**
+ * 数据库后端切换卡片（只读展示 + 复制命令，不做运行时热切换）
+ * 两个库各一张小卡：当前使用的标绿，另一个标"可切换"并给出命令。
+ */
+function renderDbSwitch(db, cfg) {
+  const box = document.getElementById('dbSwitch');
+  const cur = db.backend === 'mysql' ? 'mysql' : 'sqlite';
+  const my = db.mysql_available || {};
+  const sqliteOk = !!db.sqlite_exists;
+
+  const cards = [
+    {
+      key: 'sqlite',
+      title: 'SQLite',
+      icon: 'bi-file-earmark-medical',
+      badge: 'text-bg-primary',
+      available: sqliteOk,
+      desc: '零配置单文件数据库，数据存于 backend/skin_cancer.db',
+      detail: ['文件：backend/skin_cancer.db', '适用：答辩演示 / 单机部署'],
+      cmd: 'bash start.sh --sqlite',
+      follow: 'cd backend && ~/shixun-venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000',
+    },
+    {
+      key: 'mysql',
+      title: 'MySQL 8.0',
+      icon: 'bi-server',
+      badge: 'text-bg-warning',
+      available: !!my.reachable,
+      desc: '独立库 skin_cancer，数据存于 Windows 侧 MySQL（与医小喵隔离）',
+      detail: [
+        '地址：' + (my.host || '—') + ':' + (my.port || '—') + '/' + (my.database || '—'),
+        '适用：生产部署 / 多端共享 / DBeaver 管理',
+      ],
+      cmd: 'bash start.sh --mysql',
+      follow: 'SKIN_DB_BACKEND=mysql bash start.sh --bg',
+    },
+  ];
+
+  box.innerHTML = cards.map(c => {
+    const active = c.key === cur;
+    const border = active ? 'border-success' : (c.available ? '' : 'border-secondary');
+    const headBadge = active
+      ? '<span class="badge text-bg-success">当前使用</span>'
+      : (c.available
+          ? '<span class="badge text-bg-secondary">可切换</span>'
+          : '<span class="badge text-bg-danger">不可用</span>');
+    const dim = (!active && !c.available) ? 'opacity-50' : '';
+    return (
+      '<div class="col-md-6"><div class="card h-100 ' + border + ' ' + dim + '">' +
+      '<div class="card-body py-3">' +
+        '<div class="d-flex justify-content-between align-items-center mb-2">' +
+          '<div class="d-flex align-items-center gap-2">' +
+            '<i class="bi ' + c.icon + ' fs-5"></i>' +
+            '<span class="fw-semibold">' + c.title + '</span>' +
+          '</div>' + headBadge +
+        '</div>' +
+        '<div class="small text-muted mb-2">' + c.desc + '</div>' +
+        c.detail.map(x => '<div class="small text-muted">· ' + x + '</div>').join('') +
+        (active
+          ? '<div class="mt-3 small text-success"><i class="bi bi-check-circle me-1"></i>' +
+            '当前服务正在使用此数据库</div>'
+          : (c.available
+              ? '<div class="mt-3">' +
+                  '<div class="small text-muted mb-1">切换命令：</div>' +
+                  '<div class="d-flex align-items-center gap-2">' +
+                    '<code class="path flex-grow-1">' + c.cmd + '</code>' +
+                    '<button class="btn btn-sm btn-outline-primary" data-copy="' +
+                      encodeURIComponent(c.cmd) + '">' +
+                      '<i class="bi bi-clipboard"></i> 复制</button>' +
+                  '</div>' +
+                  '<div class="small text-muted mt-2">执行后需重启服务生效。</div>' +
+                '</div>'
+              : '<div class="mt-3 small text-danger"><i class="bi bi-x-circle me-1"></i>' +
+                '当前不可用：' + Admin.esc(my.reason || '未检测到') + '</div>')) +
+      '</div></div></div>'
+    );
+  }).join('');
+
+  // 复制按钮（用事件委托，避免重复绑定）
+  box.querySelectorAll('[data-copy]').forEach(btn => {
+    btn.onclick = async () => {
+      const text = decodeURIComponent(btn.dataset.copy);
+      try {
+        await navigator.clipboard.writeText(text);
+        const old = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check2"></i> 已复制';
+        btn.classList.replace('btn-outline-primary', 'btn-outline-success');
+        setTimeout(() => {
+          btn.innerHTML = old;
+          btn.classList.replace('btn-outline-success', 'btn-outline-primary');
+        }, 1600);
+      } catch (e) {
+        Admin.toast('复制失败，请手动选中命令复制', 'warning');
+      }
+    };
+  });
+}
+
+async function load() {
+  try {
+    const d = await Admin.api('/system');
+
+    // 顶部卡片
+    document.getElementById('st-service').innerHTML =
+      '<span class="status-dot dot-ok"></span>' + Admin.esc(d.service.name);
+    document.getElementById('st-uptime').textContent =
+      '运行 ' + d.service.uptime_human + ' · v' + d.service.version;
+
+    const m = d.model || {};
+    document.getElementById('st-model-icon').className =
+      'bi big-icon me-3 ' + (m.ready ? 'bi-check-circle-fill text-success' : 'bi-x-circle-fill text-danger');
+    document.getElementById('st-model').textContent = m.ready ? '就绪' : '未就绪';
+
+    const t = d.type_model || {};
+    document.getElementById('st-type-icon').className =
+      'bi big-icon me-3 ' + (t.ready ? 'bi-check-circle-fill text-success' : 'bi-x-circle-fill text-danger');
+    document.getElementById('st-type').textContent = t.ready ? '就绪' : '未启用';
+
+    const dk = (d.storage || {}).disk || {};
+    document.getElementById('st-disk').textContent =
+      dk.free_gb !== undefined ? dk.free_gb + ' GB' : '—';
+
+    // 模型表
+    document.getElementById('modelTable').innerHTML =
+      row('状态', m.ready
+        ? '<span class="badge text-bg-success">ready</span>'
+        : '<span class="badge text-bg-danger">not ready</span>') +
+      row('推理后端', '<code>' + Admin.esc(m.backend || '—') + '</code>') +
+      row('网络结构', Admin.esc(m.arch || '—')) +
+      row('输入尺寸', (m.img_size || '—') + ' × ' + (m.img_size || '—')) +
+      row('类别', (m.classes || []).join(' / ') || '—') +
+      row('运行设备', '<span class="badge text-bg-dark">' + Admin.esc(m.device || '—') + '</span>') +
+      row('加载耗时', (m.load_time_s ? m.load_time_s.toFixed(2) + ' s' : '—')) +
+      row('累计推理', (m.infer_count || 0) + ' 次') +
+      row('平均耗时', (m.avg_infer_ms ? m.avg_infer_ms.toFixed(1) + ' ms' : '—')) +
+      row('模型文件', '<code class="path">' + Admin.esc(m.model_path || '—') + '</code>') +
+      (m.load_error ? row('<span class="text-danger">加载错误</span>',
+        '<span class="text-danger">' + Admin.esc(m.load_error) + '</span>') : '');
+
+    // 推理配置
+    const ens = d.ensemble || {};
+    const cfg = d.config || {};
+    document.getElementById('cfgTable').innerHTML =
+      row('集成推理', ens.enabled
+        ? '<span class="badge text-bg-success">已启用（' + (ens.models || []).length + ' 模型）</span>'
+        : '<span class="badge text-bg-secondary">未启用</span>') +
+      row('集成成员', (ens.models || []).length
+        ? (ens.models || []).map(x => {
+            // 后端返回 {dir, file, weight, label}；为兼容旧格式（纯字符串）做一次兜底
+            if (typeof x === 'string') return '<code class="path">' + Admin.esc(x) + '</code>';
+            const w = (x.weight !== undefined && x.weight !== null && x.weight !== 1)
+              ? ' <span class="badge text-bg-info">权重 ' + x.weight + '</span>' : '';
+            return '<code class="path">' + Admin.esc(x.label || '') + '</code>' + w;
+          }).join('<br>')
+        : '—') +
+      row('集成阈值', ens.threshold !== null && ens.threshold !== undefined
+        ? '<code>' + ens.threshold + '</code>' : '—') +
+      row('ONNX 加速', cfg.use_onnx
+        ? '<span class="badge text-bg-success">开启</span>'
+        : '<span class="badge text-bg-secondary">关闭</span>') +
+      row('7 类类型推断', cfg.type_predict
+        ? '<span class="badge text-bg-success">开启</span>'
+        : '<span class="badge text-bg-secondary">关闭</span>') +
+      row('上传大小上限', (cfg.max_upload_mb || '—') + ' MB') +
+      row('允许格式', (cfg.allowed_ext || []).join(' '));
+
+    // 数据库
+    const db = d.database || {};
+    const up = (d.storage || {}).uploads || {};
+    const isMysql = db.backend === 'mysql';
+
+    // 头部徽章
+    const badge = document.getElementById('db-backend-badge');
+    badge.className = 'badge ' + (isMysql ? 'text-bg-warning' : 'text-bg-primary');
+    badge.textContent = db.label || (isMysql ? 'MySQL' : 'SQLite');
+
+    document.getElementById('dbTable').innerHTML =
+      row('数据库类型', '<span class="badge ' + (isMysql ? 'text-bg-warning' : 'text-bg-primary') +
+        '">' + Admin.esc(db.label || '—') + '</span>' +
+        (isMysql ? ' <span class="text-muted" style="font-size:11px">独立库，与医小喵隔离</span>' : '')) +
+      (isMysql
+        ? row('连接地址', '<code class="path">' + Admin.esc(db.dsn || '—') + '</code>')
+        : row('数据库文件', '<code class="path">' + Admin.esc(db.path || '—') + '</code>')) +
+      (isMysql
+        ? row('库名', '<code>' + Admin.esc(db.name || '—') + '</code>')
+        : row('数据库大小', (db.size_mb !== undefined && db.size_mb !== null ? db.size_mb + ' MB' : '—'))) +
+      row('用户数', (db.users !== undefined ? db.users + ' 人' : '—')) +
+      row('记录数', (db.records !== undefined ? db.records + ' 条' : '—')) +
+      row('上传图片数', up.count !== undefined ? up.count + ' 张' : '—') +
+      row('图片占用', up.size_mb !== undefined ? up.size_mb + ' MB' : '—');
+
+    // ---------- 全站模型清单 ----------
+    renderAllModels(d.all_models || [], d.ollama || {});
+
+    // ---------- 数据库切换卡片 ----------
+    renderDbSwitch(db, d.config || {});
+
+    // 磁盘条
+    if (dk.total_gb) {
+      const pct = dk.used_percent || 0;
+      const color = pct > 90 ? 'bg-danger' : pct > 75 ? 'bg-warning' : 'bg-success';
+      document.getElementById('diskBox').innerHTML =
+        '<div class="d-flex justify-content-between small mb-1">' +
+        '<span class="text-muted">项目所在磁盘</span>' +
+        '<span class="fw-semibold">' + dk.used_gb + ' / ' + dk.total_gb + ' GB</span></div>' +
+        '<div class="progress mb-3" style="height:20px">' +
+        '<div class="progress-bar ' + color + '" style="width:' + pct + '%">' +
+        pct + '%</div></div>' +
+        '<div class="d-flex justify-content-between small mb-2">' +
+        '<span class="text-muted">可用空间</span>' +
+        '<span class="fw-semibold text-success">' + dk.free_gb + ' GB</span></div>' +
+        '<div class="text-muted small">上传目录：<code class="path">' +
+        Admin.esc((d.storage || {}).uploads && 'uploads') + '</code></div>';
+    } else {
+      document.getElementById('diskBox').innerHTML =
+        '<div class="alert alert-warning mb-0">磁盘信息不可用</div>';
+    }
+
+    // 阈值预设
+    const presets = cfg.threshold_presets || {};
+    const keys = Object.keys(presets);
+    document.getElementById('thresholdTable').innerHTML = keys.length
+      ? keys.map(k => '<tr><td><span class="badge text-bg-info">' +
+          Admin.esc(presets[k].name || k) + '</span><div class="text-muted" style="font-size:11px">' +
+          Admin.esc(k) + '</div></td>' +
+          '<td><code class="fs-6">' + presets[k].value + '</code></td>' +
+          '<td class="small">' + Admin.esc(presets[k].desc || '') + '</td></tr>').join('')
+      : '<tr><td colspan="3" class="text-center text-muted py-4">无预设</td></tr>';
+  } catch (e) {
+    Admin.toast('加载失败：' + e.message, 'danger');
+  }
+}
+</script>
+</body>
+</html>

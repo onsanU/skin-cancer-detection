@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>数据看板 · 皮肤癌检测系统管理后台</title>
+  <link rel="stylesheet" href="vendor/adminlte/css/adminlte.min.css">
+  <link rel="stylesheet" href="vendor/bootstrap-icons/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="vendor/overlayscrollbars/overlayscrollbars.min.css">
+  <style>
+    .stat-card { border: 0; border-radius: 12px; color: #fff; overflow: hidden; }
+    .stat-card .inner { padding: 18px 20px; }
+    .stat-card .value { font-size: 32px; font-weight: 700; line-height: 1.1; }
+    .stat-card .label { font-size: 13.5px; opacity: .92; margin-top: 4px; }
+    .stat-card .icon { position: absolute; right: 14px; bottom: 6px; font-size: 74px; opacity: .22; }
+    .stat-card { position: relative; }
+    .g-blue   { background: linear-gradient(135deg,#0b6fa4,#01b8e8); }
+    .g-red    { background: linear-gradient(135deg,#c0392b,#e74c3c); }
+    .g-green  { background: linear-gradient(135deg,#1e8449,#27ae60); }
+    .g-purple { background: linear-gradient(135deg,#6c3483,#9b59b6); }
+    .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .bar-row .nm { width: 110px; font-size: 13px; overflow: hidden;
+                   text-overflow: ellipsis; white-space: nowrap; }
+    .bar-row .track { flex: 1; height: 20px; background: rgba(255,255,255,.09); border-radius: 10px; overflow: hidden; }
+    .bar-row .fill { height: 100%; border-radius: 10px;
+                     background: linear-gradient(90deg,#01b8e8,#0b6fa4);
+                     transition: width .6s ease; }
+    .bar-row .num { width: 48px; text-align: right; font-size: 12.5px; color: var(--bs-secondary-color); }
+    .trend-chart { display: flex; align-items: flex-end; gap: 8px; height: 170px; padding: 8px 4px 0; }
+    .trend-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end;
+                 align-items: center; height: 100%; }
+    .trend-bar { width: 100%; max-width: 46px; border-radius: 6px 6px 0 0;
+                 background: linear-gradient(180deg,#01b8e8,#0b6fa4);
+                 min-height: 3px; transition: height .6s ease; position: relative; }
+    .trend-bar:hover::after { content: attr(data-v); position: absolute; top: -22px; left: 50%;
+      transform: translateX(-50%); background: #212529; color: #fff; font-size: 11px;
+      padding: 2px 7px; border-radius: 4px; white-space: nowrap; }
+    .trend-lbl { font-size: 11px; color: var(--bs-secondary-color); margin-top: 5px; white-space: nowrap; }
+    /* 折线图（SVG，零依赖） */
+    .line-chart { width: 100%; height: 190px; display: block; overflow: visible; }
+    .line-chart .grid { stroke: rgba(255,255,255,.10); stroke-width: 1; }
+    .line-chart .axis-txt { fill: #9fb0c3; font-size: 10.5px; }
+    .line-chart .area { fill: url(#lineGrad); }
+    .line-chart .line-path { fill: none; stroke: #22b0e0; stroke-width: 2.5;
+                             stroke-linecap: round; stroke-linejoin: round; }
+    .line-chart .dot { fill: #1b2431; stroke: #22b0e0; stroke-width: 2.5;
+                       cursor: pointer; transition: r .18s ease, stroke-width .18s ease; }
+    .line-chart .dot:hover { r: 7; stroke-width: 3.5; }
+    /* 被裁剪到顶端的离群点（真实值超出刻度）——空心+警示色，一眼区分 */
+    .line-chart .dot-clip { stroke: #f0a020; fill: #1b2431; stroke-dasharray: 3 2; }
+    .line-chart .hit { fill: transparent; cursor: pointer; }
+    .line-chart .tip-bg { fill: #212529; }
+    .line-chart .tip-txt { fill: #fff; font-size: 11px; }
+    .line-chart .tip { pointer-events: none; opacity: 0; transition: opacity .15s ease; }
+    .line-chart .hit:hover + .tip, .line-chart .tip.show { opacity: 1; }
+    .mini-table td, .mini-table th { font-size: 13px; }
+    .mini-table.table-striped > tbody > tr:nth-of-type(odd) > * {
+      background: rgba(255,255,255,.03);
+    }
+    .mini-table.table-striped > tbody > tr > * { border-color: rgba(255,255,255,.08); }
+    .table-light { --bs-table-bg: rgba(255,255,255,.06); --bs-table-color: var(--bs-body-color); }
+    /* 环形图（暗色中心 + hover 动效） */
+    .donut-wrap { width: 150px; height: 150px; margin: 0 auto; position: relative; }
+    .donut-ring { width: 100%; height: 100%; border-radius: 50%; position: relative;
+                  transition: transform .25s ease, filter .25s ease; cursor: pointer; }
+    .donut-ring:hover { transform: scale(1.05); filter: drop-shadow(0 4px 14px rgba(14,165,233,.45)); }
+    .donut-hole { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+                  width: 96px; height: 96px; border-radius: 50%;
+                  background: var(--chart-hole, #171d26); color: #e6edf5;
+                  display: flex; flex-direction: column; align-items: center;
+                  justify-content: center; text-align: center; line-height: 1.25;
+                  transition: transform .25s ease; }
+    .donut-ring:hover .donut-hole { transform: translate(-50%,-50%) scale(1.03); }
+    .donut-hole .n { font-size: 20px; font-weight: 700; }
+    .donut-hole .t { font-size: 11px; color: #9fb0c3; }
+    .seg-legend { transition: transform .2s ease, opacity .2s ease; border-radius: 8px;
+                  padding: 4px 6px; cursor: pointer; }
+    .seg-legend:hover { transform: translateX(4px); background: rgba(255,255,255,.06); }
+  </style>
+</head>
+<body class="layout-fixed sidebar-expand-lg bg-body-tertiary">
+<div id="app-content">
+  <!-- 统计卡
+       ⚠️ 口径：前三张（累计检测/恶性/良性）全部【仅图像检测】—— 问答无良恶性标签，
+          混入分母会让占比失真，故恒定只用 records。问答数据单独一张卡。 -->
+  <div class="row g-3 mb-1" id="statCards">
+    <div class="col-6 col-lg-3">
+      <div class="stat-card g-blue"><div class="inner">
+        <div class="value" id="s-records">—</div>
+        <div class="label">累计检测次数</div>
+        <i class="bi bi-images icon"></i>
+      </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-card g-purple"><div class="inner">
+        <div class="value" id="s-users">—</div>
+        <div class="label">注册用户数</div>
+        <i class="bi bi-people icon"></i>
+      </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-card g-red"><div class="inner">
+        <div class="value" id="s-mal">—</div>
+        <div class="label">判定恶性 <span id="s-mal-rate" class="small"></span></div>
+        <i class="bi bi-exclamation-triangle icon"></i>
+      </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-card g-green"><div class="inner">
+        <div class="value" id="s-ben">—</div>
+        <div class="label">判定良性</div>
+        <i class="bi bi-shield-check icon"></i>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- 第二行：问答 / 今日 / 模型 / 耗时 -->
+  <div class="row g-3 mb-3">
+    <div class="col-md-3">
+      <div class="card h-100"><div class="card-body py-3 d-flex align-items-center">
+        <i class="bi bi-chat-dots fs-2 text-info me-3"></i>
+        <div><div class="h4 mb-0" id="s-chat-sessions">—</div>
+        <div class="text-muted small">问答会话
+          · <a href="records.html?tab=chat" class="text-decoration-none">消息 <span id="s-chat-msgs">0</span> 条</a>
+          · 今日 <span id="s-chat-today">0</span></div></div>
+      </div></div>
+    </div>
+    <div class="col-md-3">
+      <div class="card h-100"><div class="card-body py-3 d-flex align-items-center">
+        <i class="bi bi-calendar-check fs-2 text-primary me-3"></i>
+        <div><div class="h4 mb-0" id="s-today">—</div>
+        <div class="text-muted small">今日检测 / 新增用户 <span id="s-today-u">0</span></div></div>
+      </div></div>
+    </div>
+    <div class="col-md-3">
+      <div class="card h-100"><div class="card-body py-3 d-flex align-items-center">
+        <i class="bi bi-cpu fs-2 me-3" id="s-model-icon"></i>
+        <div><div class="h5 mb-0" id="s-model">检查中…</div>
+        <div class="text-muted small" id="s-model-sub">推理引擎</div></div>
+      </div></div>
+    </div>
+    <div class="col-md-3">
+      <div class="card h-100"><div class="card-body py-3 d-flex align-items-center">
+        <i class="bi bi-stopwatch fs-2 text-success me-3"></i>
+        <div><div class="h4 mb-0" id="s-latency">—</div>
+        <div class="text-muted small">平均推理耗时（图像·毫秒）<br>
+          <span class="text-info">问答 <span id="s-chat-reply">—</span></span></div></div>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <!-- 趋势图：粒度（日/周/月）× 数据源（全部/图像/问答）双切换 -->
+    <div class="col-lg-7">
+      <div class="card h-100">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <h3 class="card-title mb-0">
+            <i class="bi bi-graph-up-arrow me-1"></i>
+            <span id="trendTitle">近 7 日检测趋势</span>
+          </h3>
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <!-- 数据源 -->
+            <div class="btn-group btn-group-sm" role="group" aria-label="数据源">
+              <input type="radio" class="btn-check" name="trendSrc" id="src-all" value="all" autocomplete="off">
+              <label class="btn btn-outline-info" for="src-all">全部</label>
+              <input type="radio" class="btn-check" name="trendSrc" id="src-record" value="record" autocomplete="off" checked>
+              <label class="btn btn-outline-info" for="src-record">图像</label>
+              <input type="radio" class="btn-check" name="trendSrc" id="src-chat" value="chat" autocomplete="off">
+              <label class="btn btn-outline-info" for="src-chat">问答</label>
+            </div>
+            <!-- 粒度 -->
+            <div class="btn-group btn-group-sm" role="group" aria-label="时间粒度">
+              <input type="radio" class="btn-check" name="trendGrain" id="g-day" value="day" autocomplete="off" checked>
+              <label class="btn btn-outline-primary" for="g-day">日</label>
+              <input type="radio" class="btn-check" name="trendGrain" id="g-week" value="week" autocomplete="off">
+              <label class="btn btn-outline-primary" for="g-week">周</label>
+              <input type="radio" class="btn-check" name="trendGrain" id="g-month" value="month" autocomplete="off">
+              <label class="btn btn-outline-primary" for="g-month">月</label>
+            </div>
+            <button class="btn btn-sm btn-outline-secondary" id="btn-refresh">
+              <i class="bi bi-arrow-clockwise"></i></button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="trend-chart" id="trendChart"></div>
+        </div>
+      </div>
+    </div>
+    <!-- 良恶性分布 -->
+    <div class="col-lg-5">
+      <div class="card h-100">
+        <div class="card-header"><h3 class="card-title mb-0">
+          <i class="bi bi-pie-chart me-1"></i> 良恶性分布</h3></div>
+        <div class="card-body" id="distBox"></div>
+      </div>
+    </div>
+    <!-- 活跃用户 -->
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h3 class="card-title mb-0">
+            <i class="bi bi-trophy me-1"></i> 检测次数 Top 10 用户
+            <span class="text-muted small fw-normal ms-1">（图像 / 问答分列统计）</span>
+          </h3>
+          <a href="users.html" class="btn btn-sm btn-outline-primary">
+            全部用户 <i class="bi bi-arrow-right"></i></a>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-sm table-hover mini-table mb-0">
+              <thead class="table-light"><tr>
+                <th style="width:70px">排名</th><th>用户名</th><th style="width:90px">角色</th>
+                <th class="text-end" style="width:110px">图像检测</th>
+                <th class="text-end" style="width:100px">问答会话</th>
+                <th style="width:180px">图像占比</th>
+              </tr></thead>
+              <tbody id="topUsers"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/adminlte/js/bootstrap.bundle.min.js"></script>
+<script src="vendor/adminlte/js/adminlte.min.js"></script>
+<script src="admin.js"></script>
+<script>
+// 趋势图当前选择（与页面上的 radio 联动）
+let trendGrain = 'day';
+let trendSource = 'record';
+
+if (Admin.guardAdmin()) {
+  Admin.renderLayout('index.html', '数据看板');
+
+  // 趋势切换：改选择后重新拉数据（只影响趋势，但一次拿全量也便宜）
+  document.querySelectorAll('input[name="trendGrain"]').forEach(el => {
+    el.addEventListener('change', () => { trendGrain = el.value; load(); });
+  });
+  document.querySelectorAll('input[name="trendSrc"]').forEach(el => {
+    el.addEventListener('change', () => { trendSource = el.value; load(); });
+  });
+  document.getElementById('btn-refresh').onclick = load;
+  load();
+}
+
+const SOURCE_CN = { all: '全部', record: '图像检测', chat: '医疗问答' };
+
+async function load() {
+  try {
+    const d = await Admin.api('/stats?grain=' + trendGrain + '&source=' + trendSource);
+
+    // 统计卡（⚠️ 前三张与环形图恒为【仅图像】，问答单独一张卡）
+    document.getElementById('s-records').textContent = d.total_records;
+    document.getElementById('s-users').textContent = d.total_users;
+    document.getElementById('s-mal').textContent = d.malignant;
+    document.getElementById('s-mal-rate').textContent = '(' + d.malignant_rate + '%)';
+    document.getElementById('s-ben').textContent = d.benign;
+    document.getElementById('s-today').textContent = d.today_records;
+    document.getElementById('s-today-u').textContent = d.today_users;
+    document.getElementById('s-latency').textContent =
+      d.avg_infer_ms ? d.avg_infer_ms.toFixed(1) : '—';
+
+    // 问答卡
+    const c = d.chat || {};
+    document.getElementById('s-chat-sessions').textContent = c.sessions ?? 0;
+    document.getElementById('s-chat-msgs').textContent = c.messages ?? 0;
+    document.getElementById('s-chat-today').textContent = c.today_sessions ?? 0;
+    document.getElementById('s-chat-reply').textContent =
+      c.avg_reply_ms ? (c.avg_reply_ms / 1000).toFixed(1) + 's' : '—';
+
+    // 模型状态
+    const m = d.model || {};
+    const ok = !!m.ready;
+    document.getElementById('s-model-icon').className =
+      'bi fs-2 me-3 ' + (ok ? 'bi-check-circle-fill text-success' : 'bi-x-circle-fill text-danger');
+    document.getElementById('s-model').textContent = ok ? '模型就绪' : '模型未就绪';
+    document.getElementById('s-model-sub').textContent =
+      ok ? (m.arch || '') + ' · ' + (m.backend || '') + (m.ensemble ? ' · 集成' + m.ensemble_size : '')
+         : (m.load_error || '加载失败');
+
+    // 趋势标题随选择变化
+    const spanCn = trendGrain === 'day' ? '近 7 日' : trendGrain === 'week' ? '近 8 周' : '近 6 月';
+    document.getElementById('trendTitle').textContent =
+      spanCn + SOURCE_CN[trendSource] + '趋势';
+
+    renderTrend(d.trend || []);
+    renderDist(d.benign, d.malignant, d.total_records);
+    renderTop(d.top_users || [], d.chat?.top_users || [], d.total_records);
+  } catch (e) {
+    Admin.toast('加载失败：' + e.message, 'danger');
+  }
+}
+
+function renderTrend(trend) {
+  const box = document.getElementById('trendChart');
+  if (!trend.length) {
+    box.className = 'trend-chart';
+    box.innerHTML = '<div class="text-muted text-center w-100 align-self-center">该区间暂无数据</div>';
+    return;
+  }
+
+  // SVG 折线图（零依赖手写）
+  const W = 620, H = 190;
+  const PAD = { t: 22, r: 14, b: 26, l: 40 };
+  const iw = W - PAD.l - PAD.r;
+  const ih = H - PAD.t - PAD.b;
+
+  const counts = trend.map(t => t.count);
+
+  // ⚠️ Y 轴自适应（关键）：历史压测会让某天高达 1404，若直接按峰值定标，
+  //    26/5/7 这类真实小值会被压成贴地一条线、肉眼完全看不见。
+  //    做法：识别离群峰值（> 其余最大值 5 倍），用「其余值中的最大值」定标，
+  //    超标的点裁剪到顶端 + 虚线圆点标记，既不丢点也不压扁其余趋势。
+  const sorted = [...counts].sort((a, b) => b - a);
+  const peak = sorted[0], second = sorted[1] ?? 0;
+  const outlier = sorted.length > 1 && peak > Math.max(second * 5, 4);
+  const base = outlier ? second : peak;
+  const step = Math.max(1, Math.ceil(base / 4));
+  const yMax = step * 4;
+
+  const x = i => PAD.l + (trend.length === 1 ? iw / 2 : (i / (trend.length - 1)) * iw);
+  // 超峰值的点裁剪到顶端（保留 1px 内边距，圆点仍可见）
+  const y = v => PAD.t + ih - (Math.min(v, yMax) / yMax) * ih;
+
+  // 网格 + y 轴刻度
+  let grid = '';
+  for (let k = 0; k <= 4; k++) {
+    const gy = PAD.t + ih - (k / 4) * ih;
+    const val = step * k;
+    // 顶格且存在被裁剪的离群值时，标注真实峰值
+    const label = (outlier && k === 4) ? (val + '+' ) : val;
+    grid += '<line class="grid" x1="' + PAD.l + '" y1="' + gy + '" x2="' + (W - PAD.r) + '" y2="' + gy + '"/>' +
+            '<text class="axis-txt" x="' + (PAD.l - 7) + '" y="' + (gy + 3.5) + '" text-anchor="end">' +
+            label + '</text>';
+  }
+
+  // 折线 + 面积
+  const pts = trend.map((t, i) => [x(i), y(t.count)]);
+  const lineD = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  const areaD = lineD + ' L' + pts[pts.length - 1][0].toFixed(1) + ' ' + (PAD.t + ih) +
+                ' L' + pts[0][0].toFixed(1) + ' ' + (PAD.t + ih) + ' Z';
+
+  // 数据点 + x 轴标签 + hover 热区/提示
+  let dots = '', tips = '';
+  trend.forEach((t, i) => {
+    const px = x(i), py = y(t.count);
+    const clipped = t.count > yMax;              // 被裁剪的离群点
+    const label = t.date.length > 7 ? t.date.slice(5) : t.date;
+    dots += '<circle class="dot' + (clipped ? ' dot-clip' : '') + '" cx="' + px.toFixed(1) +
+            '" cy="' + py.toFixed(1) + '" r="4"/>';
+    tips += '<text class="axis-txt" x="' + px.toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle">' +
+            label + '</text>';
+
+    // hover 热区（比点大，好点）+ 气泡提示
+    const txt = t.date + ' · ' + t.count + ' 次';
+    const tipW = Math.max(84, txt.length * 7.2);
+    let tipX = px - tipW / 2;
+    tipX = Math.max(2, Math.min(W - tipW - 2, tipX));
+    const tipY = Math.max(2, py - 34);
+    tips +=
+      '<rect class="hit" x="' + (px - 16).toFixed(1) + '" y="' + PAD.t.toFixed(1) +
+      '" width="32" height="' + ih.toFixed(1) + '"/>' +
+      '<g class="tip">' +
+      '<rect class="tip-bg" x="' + tipX.toFixed(1) + '" y="' + tipY.toFixed(1) +
+      '" width="' + tipW.toFixed(1) + '" height="21" rx="4"/>' +
+      '<text class="tip-txt" x="' + (tipX + tipW / 2).toFixed(1) + '" y="' +
+      (tipY + 14.5).toFixed(1) + '" text-anchor="middle">' + txt + '</text>' +
+      '</g>';
+  });
+
+  box.className = 'w-100';
+  box.innerHTML =
+    '<svg class="line-chart" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="img" aria-label="趋势折线图">' +
+    '<defs><linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">' +
+    '<stop offset="0%" stop-color="#01b8e8" stop-opacity=".35"/>' +
+    '<stop offset="100%" stop-color="#01b8e8" stop-opacity="0"/>' +
+    '</linearGradient></defs>' +
+    grid +
+    '<path class="area" d="' + areaD + '"/>' +
+    '<path class="line-path" d="' + lineD + '"/>' +
+    dots + tips +
+    '</svg>' +
+    (outlier ? '<div class="text-muted text-center w-100" style="font-size:11px">' +
+      '⚠️ 峰值 ' + peak + ' 超出刻度，为看清其余趋势已按 ' + yMax + ' 定标（顶点为裁剪显示）</div>' : '');
+
+  // 折线 hover 时也让对应点/气泡显示（用 JS 保证热区命中）
+  const groups = box.querySelectorAll('.tip');
+  box.querySelectorAll('.hit').forEach((hit, i) => {
+    hit.addEventListener('mouseenter', () => groups[i] && groups[i].classList.add('show'));
+    hit.addEventListener('mouseleave', () => groups[i] && groups[i].classList.remove('show'));
+  });
+}
+
+function renderDist(ben, mal, total) {
+  const box = document.getElementById('distBox');
+  if (!total) {
+    box.innerHTML = '<div class="text-muted text-center py-5">暂无检测记录</div>';
+    return;
+  }
+  const bp = (ben / total * 100).toFixed(1), mp = (mal / total * 100).toFixed(1);
+  box.innerHTML =
+    // 环形图（conic-gradient 零依赖）——中心用暗色，避免白底白字
+    '<div class="text-center mb-3">' +
+    '<div class="donut-wrap">' +
+    '<div class="donut-ring" id="donutRing" style="background:conic-gradient(#e74c3c 0 ' + mp +
+    '%,#27ae60 ' + mp + '% 100%)">' +
+    '<div class="donut-hole">' +
+    '<div class="n">' + total + '</div>' +
+    '<div class="t">总检测数</div></div></div></div></div>' +
+    // 图例（hover 有起伏 + 与扇形联动）
+    '<div class="bar-row seg-legend" data-seg="mal">' +
+    '<span class="nm"><i class="bi bi-circle-fill text-danger me-1"></i>恶性</span>' +
+    '<div class="track"><div class="fill" style="width:' + mp + '%;background:linear-gradient(90deg,#c0392b,#e74c3c)"></div></div>' +
+    '<span class="num">' + mal + '</span></div>' +
+    '<div class="bar-row seg-legend" data-seg="ben">' +
+    '<span class="nm"><i class="bi bi-circle-fill text-success me-1"></i>良性</span>' +
+    '<div class="track"><div class="fill" style="width:' + bp + '%;background:linear-gradient(90deg,#1e8449,#27ae60)"></div></div>' +
+    '<span class="num">' + ben + '</span></div>' +
+    '<div class="text-muted small text-center mt-2">恶性占比 ' + mp + '% · 良性占比 ' + bp + '%' +
+    '<br><span style="font-size:11px">（仅统计图像检测，不含医疗问答）</span></div>';
+
+  // 图例 hover → 环形图放大并高亮对应配色
+  const ring = document.getElementById('donutRing');
+  box.querySelectorAll('.seg-legend').forEach(el => {
+    el.addEventListener('mouseenter', () => {
+      const malSeg = el.dataset.seg === 'mal';
+      ring.style.transform = malSeg ? 'scale(1.06) rotate(-4deg)' : 'scale(1.06) rotate(4deg)';
+      ring.style.filter = malSeg
+        ? 'drop-shadow(0 0 14px rgba(231,76,60,.65))'
+        : 'drop-shadow(0 0 14px rgba(39,174,96,.65))';
+      el.style.transform = 'translateX(4px) scale(1.02)';
+    });
+    el.addEventListener('mouseleave', () => {
+      ring.style.transform = '';
+      ring.style.filter = '';
+      el.style.transform = '';
+    });
+  });
+}
+
+function renderTop(list, chatList, total) {
+  const tb = document.getElementById('topUsers');
+  // 问答会话数按用户名索引（后端 chat.top_users 只含 >0 的用户）
+  const chatMap = {};
+  (chatList || []).forEach(u => { chatMap[u.username] = u.count; });
+
+  if (!list.length) {
+    tb.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">暂无数据</td></tr>';
+    return;
+  }
+  tb.innerHTML = list.map((u, i) => {
+    const pct = total ? (u.count / total * 100) : 0;
+    const cn = chatMap[u.username] || 0;
+    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
+    return '<tr><td>' + medal + '</td>' +
+      '<td><a href="records.html?username=' + encodeURIComponent(u.username) + '" class="text-decoration-none">' +
+      Admin.esc(u.username) + '</a></td>' +
+      '<td>' + (u.role === 'admin' ? '<span class="badge text-bg-danger">admin</span>'
+                                    : '<span class="badge text-bg-secondary">user</span>') + '</td>' +
+      '<td class="text-end fw-semibold">' + u.count + '</td>' +
+      '<td class="text-end">' + (cn
+        ? '<a href="records.html?tab=chat&username=' + encodeURIComponent(u.username) +
+          '" class="text-decoration-none text-info">' + cn + '</a>'
+        : '<span class="text-muted">0</span>') + '</td>' +
+      '<td><div class="progress" style="height:8px"><div class="progress-bar" ' +
+      'style="width:' + pct.toFixed(1) + '%"></div></div>' +
+      '<span class="text-muted" style="font-size:11px">' + pct.toFixed(1) + '%</span></td></tr>';
+  }).join('');
+}
+</script>
+</body>
+</html>

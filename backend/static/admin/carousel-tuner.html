@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>功能卡轮播 · 实时调参预览</title>
+<!--
+  功能卡轮播调参页（同源方案）
+  ─────────────────────────────────────────────
+  ⚠️ 关键：不复制渲染逻辑！
+     本页用 iframe 加载线上 /app/，通过 URL 参数 ?carousel=slide:0.6,minH:320,en:1
+     让 FeatureCarousel 组件自己按参数渲染 —— 预览=线上真实渲染，绝不漂移。
+     组件里已内置参数解析（不带参数时行为与从前完全一致）。
+  满意后把参数写回 HomePage.jsx 的 <FeatureCarousel ... /> 即可。
+-->
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: #0f172a; color: #e2e8f0;
+  }
+  .layout { display: flex; height: 100vh; }
+  .panel {
+    width: 350px; flex: 0 0 350px; background: #1e293b; padding: 18px;
+    overflow-y: auto; border-right: 1px solid #334155;
+  }
+  .panel h1 { font-size: 15px; margin: 0 0 4px; color: #f1f5f9; }
+  .panel .sub { font-size: 11.5px; color: #94a3b8; margin: 0 0 18px; line-height: 1.6; }
+  .group { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #334155; }
+  .group:last-child { border-bottom: 0; margin-bottom: 0; }
+  .group > label.t { display: block; font-size: 11.5px; font-weight: 700; color: #7dd3fc; margin-bottom: 9px; letter-spacing: .04em; }
+  .row { margin-bottom: 12px; }
+  .row .head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
+  .row .name { font-size: 11.5px; color: #cbd5e1; }
+  .row .val { font-size: 11.5px; color: #fbbf24; font-weight: 700; font-family: ui-monospace, monospace; }
+  input[type=range] { width: 100%; accent-color: #38bdf8; }
+  .btns { display: flex; gap: 6px; flex-wrap: wrap; }
+  button {
+    flex: 1 1 auto; padding: 7px 9px; font-size: 11.5px; border-radius: 6px; cursor: pointer;
+    border: 1px solid #475569; background: #334155; color: #e2e8f0; transition: .15s; white-space: nowrap;
+  }
+  button:hover { background: #475569; }
+  button.on { background: #0284c7; border-color: #0ea5e9; }
+  .out {
+    background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 9px;
+    font-family: ui-monospace, monospace; font-size: 11px; color: #86efac; white-space: pre-wrap;
+    line-height: 1.65;
+  }
+  .stage { flex: 1; background: #fff; }
+  .stage iframe { width: 100%; height: 100%; border: 0; display: block; }
+  .hint { font-size: 10.5px; color: #64748b; margin-top: 5px; line-height: 1.5; }
+  .warn { color: #fca5a5; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="panel">
+    <h1>🎛 功能卡轮播 · 调参预览</h1>
+    <p class="sub">
+      拖动滑块 → 右侧 iframe 实时重渲染（同一份组件代码，所见即线上）。
+      满意后点「复制参数」交给咪咪写回 HomePage.jsx 喵~
+    </p>
+
+    <div class="group">
+      <label class="t">① 容器宽度</label>
+      <div class="row">
+        <div class="head"><span class="name">max-width</span><span class="val" id="vWrap">1280px</span></div>
+        <input type="range" id="wrap" min="1024" max="1600" step="32" value="1280" />
+      </div>
+      <div class="hint">「检测流程」区当前 1280px（屏宽≥1600 时 1440px）。调成一致即左右对齐。</div>
+    </div>
+
+    <div class="group">
+      <label class="t">② 卡片露出比例</label>
+      <div class="row">
+        <div class="head"><span class="name">主卡占视口</span><span class="val" id="vSlide">80%</span></div>
+        <input type="range" id="slide" min="50" max="88" step="1" value="80" />
+      </div>
+      <div class="hint">左右各露 = (100% − 主卡) ÷ 2。<span id="expNow">现为 10%</span><br>调小主卡占比 → 露出更多（60% = 各露 20%，比原来多一倍）。</div>
+    </div>
+
+    <div class="group">
+      <label class="t">③ 卡片高度</label>
+      <div class="row">
+        <div class="head"><span class="name">min-height</span><span class="val" id="vH">220px</span></div>
+        <input type="range" id="hgt" min="180" max="440" step="10" value="220" />
+      </div>
+      <div class="hint">现为 220px。调大卡片变高，多出的空间用英文标题块 + 留白填充。</div>
+    </div>
+
+    <div class="group">
+      <label class="t">④ 英文标题块</label>
+      <div class="btns">
+        <button id="enOn">显示英文</button>
+        <button id="enOff" class="on">隐藏英文</button>
+      </div>
+      <div class="hint">UPLOAD / INFERENCE / VISUALIZE / ADVICE / HISTORY / SECURITY</div>
+    </div>
+
+    <div class="group">
+      <label class="t">⑤ 快捷预设</label>
+      <div class="btns">
+        <button data-preset="orig">原始 80%/220</button>
+        <button data-preset="half">露出×2 60%/220</button>
+        <button data-preset="tall">加高 70%/320</button>
+        <button data-preset="big">又高又露 60%/360</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <label class="t">⑥ 当前参数</label>
+      <div class="out" id="out">加载中…</div>
+      <div class="btns" style="margin-top:9px">
+        <button id="copy" class="on">复制参数</button>
+        <button id="reset">恢复默认</button>
+      </div>
+      <div class="hint" id="status"></div>
+    </div>
+  </aside>
+
+  <main class="stage">
+    <iframe id="frame" src="/app/?carousel=slide:0.8,minH:220,en:0"></iframe>
+  </main>
+</div>
+
+<script>
+const DEF = { wrap: 1280, slide: 80, height: 220, showEn: false };
+const P = { ...DEF };
+const $ = (id) => document.getElementById(id);
+const frame = $('frame');
+
+/** 用 URL 参数重载 iframe —— 组件自己按参数渲染，保证同源 */
+let reloadTimer = null;
+function reload() {
+  clearTimeout(reloadTimer);
+  reloadTimer = setTimeout(() => {
+    const url = '/app/?wide=' + P.wrap
+      + '&carousel=slide:' + (P.slide / 100).toFixed(3)
+      + ',minH:' + P.height + ',en:' + (P.showEn ? 1 : 0);
+    $('status').textContent = '🔄 重渲染中…（iframe 重载，约 1 秒）';
+    frame.src = url;
+  }, 160);   // 防抖，避免拖动滑块时疯狂重载
+}
+
+function syncUI() {
+  $('vWrap').textContent = P.wrap + 'px';
+  $('vSlide').textContent = P.slide + '%';
+  $('vH').textContent = P.height + 'px';
+  const exp = ((100 - P.slide) / 2).toFixed(1);
+  $('expNow').textContent = '现为左右各露 ' + exp + '%';
+  $('out').textContent =
+    'slideRatio = ' + (P.slide / 100).toFixed(3) + '\n'
+    + 'cardMinH  = ' + P.height + '\n'
+    + 'showEn    = ' + (P.showEn ? 'true' : 'false') + '\n'
+    + 'wrap      = ' + P.wrap + 'px\n'
+    + '─────────────\n'
+    + '左右露出 : ' + exp + '%  (原 10%)';
+  $('enOn').classList.toggle('on', P.showEn);
+  $('enOff').classList.toggle('on', !P.showEn);
+}
+
+frame.addEventListener('load', () => {
+  $('status').textContent = '✓ 已渲染（参数已生效）';
+});
+
+$('wrap').oninput = (e) => { P.wrap = +e.target.value; syncUI(); reload(); };
+$('slide').oninput = (e) => { P.slide = +e.target.value; syncUI(); reload(); };
+$('hgt').oninput = (e) => { P.height = +e.target.value; syncUI(); reload(); };
+$('enOn').onclick = () => { P.showEn = true; syncUI(); reload(); };
+$('enOff').onclick = () => { P.showEn = false; syncUI(); reload(); };
+
+const PRESETS = {
+  orig: { wrap: 1280, slide: 80, height: 220, showEn: false },
+  half: { wrap: 1280, slide: 60, height: 220, showEn: false },
+  tall: { wrap: 1280, slide: 70, height: 320, showEn: true },
+  big:  { wrap: 1280, slide: 60, height: 360, showEn: true },
+};
+document.querySelectorAll('[data-preset]').forEach((b) => {
+  b.onclick = () => {
+    Object.assign(P, PRESETS[b.dataset.preset]);
+    $('wrap').value = P.wrap; $('slide').value = P.slide; $('hgt').value = P.height;
+    syncUI(); reload();
+  };
+});
+
+$('copy').onclick = () => {
+  const txt = `slideRatio=${(P.slide / 100).toFixed(3)}\ncardMinH=${P.height}\nshowEn=${P.showEn}\nwrap=${P.wrap}px`;
+  navigator.clipboard?.writeText(txt).then(() => {
+    $('copy').textContent = '已复制 ✓';
+    setTimeout(() => { $('copy').textContent = '复制参数'; }, 1500);
+  }).catch(() => {
+    $('out').textContent = txt + '\n\n（复制失败，请手动抄上方数值）';
+  });
+};
+
+$('reset').onclick = () => {
+  Object.assign(P, DEF);
+  $('wrap').value = P.wrap; $('slide').value = P.slide; $('hgt').value = P.height;
+  syncUI(); reload();
+};
+
+syncUI();
+</script>
+</body>
+</html>

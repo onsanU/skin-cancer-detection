@@ -1,0 +1,21 @@
+演示存档索引
+============================================================
+
+本目录包含系统真实运行的输出记录，服务故障时可直接使用。
+
+  demo_output.txt             5169 字节
+  detect_benign.txt           2047 字节
+  detect_malignant.txt        2083 字节
+  health.txt                   730 字节
+  model_info.txt              1212 字节
+  thresholds.txt               524 字节
+  types.txt                   1190 字节
+
+主要文件说明：
+  demo_output.txt    完整演示流程（7 个步骤，推荐阅读）
+  health.txt         服务健康检查原始响应
+  model_info.txt     模型信息（集成 + 7类）
+  types.txt          七类病变类型定义
+  thresholds.txt     工作模式阈值预设
+  detect_benign.txt  良性样本检测原始响应
+  detect_malignant.txt 恶性样本检测原始响应

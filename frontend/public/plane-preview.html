@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>纸飞机姿态实时预览</title>
+<style>
+  body { margin:0; background:#faf6eb; font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif; color:#222a4c; }
+  .wrap { max-width:1100px; margin:0 auto; padding:20px; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  .sub { font-size:12px; color:#7a8199; margin-bottom:14px; }
+  .stage { display:flex; gap:20px; align-items:flex-start; }
+  canvas { background:linear-gradient(160deg,#fdf9f0,#f4f7ea); border-radius:12px; box-shadow:0 2px 14px rgba(34,42,76,.10); }
+  .panel { flex:1; }
+  .row { margin-bottom:12px; }
+  .row label { display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px; }
+  .row label b { color:#0066e3; font-variant-numeric:tabular-nums; }
+  input[type=range] { width:100%; accent-color:#0066e3; }
+  .val { font-family:Consolas,monospace; font-size:12px; background:#eef2f8; border-radius:6px; padding:2px 6px; }
+  .btns { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+  button { padding:7px 14px; font-size:13px; border-radius:8px; border:1px solid #cfd6e2; background:#fff; cursor:pointer; }
+  button.primary { background:#334861; color:#f7f9e8; border-color:#334861; }
+  button:hover { filter:brightness(.96); }
+  .out { margin-top:12px; font-size:12px; background:#fff; border:1px solid #e5e8ed; border-radius:8px; padding:10px; font-family:Consolas,monospace; line-height:1.7; }
+  .hint { font-size:11px; color:#8e94a6; margin-top:8px; line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>纸飞机姿态实时预览</h1>
+  <div class="sub">拖动滑块实时看飞机转动 · 找到满意姿态后把下面「代码参数」整行复制给咪咪</div>
+  <div class="stage">
+    <canvas id="cv" width="620" height="620"></canvas>
+    <div class="panel">
+      <div class="row">
+        <label><span>Z 轴（画面内旋转 · 正＝顺时针）</span><b id="vz">20</b></label>
+        <input type="range" id="z" min="-180" max="180" step="1" value="131">
+      </div>
+      <div class="row">
+        <label><span>Y 轴（水平左右转向）</span><b id="vy">0</b></label>
+        <input type="range" id="y" min="-180" max="180" step="1" value="6">
+      </div>
+      <div class="row">
+        <label><span>X 轴（俯仰 抬头/低头）</span><b id="vx">0</b></label>
+        <input type="range" id="x" min="-90" max="90" step="1" value="90">
+      </div>
+      <div class="row">
+        <label><span>roll 滚转（侧倾）</span><b id="vr">8</b></label>
+        <input type="range" id="r" min="-90" max="90" step="1" value="-20">
+      </div>
+      <div class="row">
+        <label><span>大小</span><b id="vs">560</b></label>
+        <input type="range" id="s" min="200" max="900" step="10" value="560">
+      </div>
+      <div class="btns">
+        <button id="reset">回到当前网页参数</button>
+        <button id="fine" class="primary">±5° 微调模式</button>
+        <button id="coarse">±15° 粗调模式</button>
+      </div>
+      <div class="out" id="out"></div>
+      <div class="hint">
+        操作提示：先拖 Z 轴把飞机"转正"，再拖 Y 轴调左右朝向，最后用 X/roll 微调俯仰和侧倾。<br>
+        找到满意的样子后，把上面「代码参数」那一行发给咪咪即可。
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+/* __GEO_START__ */
+/**
+ * 纸飞机 3D 姿态 —— 唯一渲染源（single source of truth）
+ *
+ * ⚠️ 为什么要有这个文件：
+ *   plane-preview.html（调参页）与 HeroPlane.jsx（网页）必须用【同一套】姿态计算，
+ *   否则会出现「预览页调好了、搬到网页里就变样」。历史上就是因为两边各写一份，
+ *   参数越调越乱。现在两边共用本模块，预览页所见 = 网页所得。
+ *
+ * 模型坐标系（原始 mesh）：+Z = 机身纵轴（-3.5 端是机头尖点，+1.5 端是机尾宽面）
+ * 屏幕坐标系：x 向右，y 向下
+ */
+
+/* 纸飞机 3D 网格：从 trajectory.ai 的 WebGL 版本提取（43 顶点 / 20 三角形） */
+const PLANE_IDX = [42,38,37,41,36,34,38,33,31,40,30,28,25,27,24,39,25,23,38,31,37,36,35,34,33,32,31,30,29,28,27,26,24,25,24,23,22,11,21,20,10,19,18,9,17,8,7,6,5,16,13,4,15,14,3,13,12,1,2,0]
+
+const PLANE_POS = [
+  [0,1.2076,-3.5], [0,-0.1797,1.5], [-0.6631,1.2076,1.5], [-1.9894,1.2076,1.5],
+  [0.6631,1.2076,1.5], [1.9894,1.2076,1.5], [0,1.2474,-3.4963], [0,-0.1411,1.5107],
+  [-0.6403,1.2403,1.503], [-1.9894,1.2476,1.5], [0.6403,1.2403,1.503], [1.9894,1.2476,1.5],
+  [-0.6631,1.2076,1.5], [0,1.2076,-3.5], [0,1.2076,-3.5], [0,-0.1797,1.5],
+  [0.6631,1.2076,1.5], [-0.6403,1.2403,1.503], [0,1.2474,-3.4963], [0,1.2474,-3.4963],
+  [0,-0.1411,1.5107], [0,1.2474,-3.4963], [0.6403,1.2403,1.503], [0,-0.1797,1.5],
+  [-0.6631,1.2076,1.5], [-0.6403,1.2403,1.503], [-1.9894,1.2076,1.5], [-1.9894,1.2476,1.5],
+  [-1.9894,1.2076,1.5], [0,1.2076,-3.5], [0,1.2474,-3.4963], [0.6631,1.2076,1.5],
+  [0,-0.1797,1.5], [0,-0.1411,1.5107], [0,1.2076,-3.5], [1.9894,1.2076,1.5],
+  [1.9894,1.2476,1.5], [1.9894,1.2076,1.5], [0.6403,1.2403,1.503], [0,-0.1411,1.5107],
+  [-1.9894,1.2476,1.5], [0,1.2474,-3.4963], [1.9894,1.2476,1.5],
+]
+
+/* ---- 向量工具 ---- */
+function vRotX(v, a) { const c=Math.cos(a), s=Math.sin(a); return [v[0], v[1]*c-v[2]*s, v[1]*s+v[2]*c] }
+function vRotY(v, a) { const c=Math.cos(a), s=Math.sin(a); return [v[0]*c+v[2]*s, v[1], -v[0]*s+v[2]*c] }
+function vRotZ(v, a) { const c=Math.cos(a), s=Math.sin(a); return [v[0]*c-v[1]*s, v[0]*s+v[1]*c, v[2]] }
+function vNorm(v) { const L = Math.hypot(v[0],v[1],v[2]) || 1; return [v[0]/L, v[1]/L, v[2]/L] }
+const deg = (d) => (d * Math.PI) / 180
+
+/* ---- 姿态参数（唯一来源）----
+ * 由主人用 plane-preview.html 拖动确认。
+ * 预览页与网页共用本模块，因此「预览所见 = 网页所得」（已用顶点比对验证差异为 0）。
+ */
+const PLANE_POSE = {
+  rot90: 90,     // 模型绕 Y 轴转正
+  yaw: 135,      // 水平转向
+  pitch: 90,     // 俯仰
+  roll: -20,     // 侧倾
+  // 主人调参页微调值（Z 滑块基准 20，故 extraZ = 131 - 20）
+  extraZ: 111,
+  extraY: 6,
+  extraX: 90,
+}
+
+/* ---- 相机 ---- */
+const PLANE_CAM = { camDist: 6.5, persp: 0.30 }
+
+/* ---- 光照与配色（对齐原站参考图）---- */
+const PLANE_LIGHT = vNorm([0.55, 0.8, 0.45])
+const PLANE_TAIL  = [0xEC, 0xD5, 0xE4]   // 尾部：淡粉紫
+const PLANE_MID   = [0xF7, 0xE6, 0xE8]   // 中段：淡粉
+const PLANE_NOSE  = [0xFD, 0xF4, 0xF0]   // 机头：接近白
+const PLANE_RIM   = [0x8A, 0x6C, 0xB8]   // 边缘光：紫
+const PLANE_SHADE = [0xC9, 0xA8, 0xC4]   // 背光面：粉紫阴影
+
+/** 机头 / 机尾顶点下标（模型原始 Z 轴：-3.5 端是尖的机头，+1.5 端是宽的机尾） */
+const HEAD_I = PLANE_POS.findIndex((p) => p[2] === Math.min(...PLANE_POS.map(q => q[2])))
+const TAIL_I = PLANE_POS.findIndex((p) => p[2] === Math.max(...PLANE_POS.map(q => q[2])))
+
+/**
+ * 计算姿态变换后的顶点（含居中 + 归一化）。
+ * @param {{rot90:number,yaw:number,pitch:number,roll:number,extraZ?:number,extraY?:number,extraX?:number}} pose
+ * @returns {{vs:number[][], fitR:number}}
+ */
+function computePose(pose = PLANE_POSE) {
+  const { rot90, yaw, pitch, roll, extraZ = 0, extraY = 0, extraX = 0 } = pose
+  let vs = PLANE_POS.map((p) => vRotY(p, deg(rot90)))
+  const cx = vs.reduce((s, p) => s + p[0], 0) / vs.length
+  const cy = vs.reduce((s, p) => s + p[1], 0) / vs.length
+  const cz = vs.reduce((s, p) => s + p[2], 0) / vs.length
+  vs = vs.map((p) => [p[0] - cx, p[1] - cy, p[2] - cz])
+  // 基准姿态：roll → yaw → pitch
+  vs = vs.map((p) => vRotX(vRotY(vRotZ(p, deg(roll)), deg(yaw)), deg(pitch)))
+  // 叠加微调：Z → Y → X
+  if (extraZ) vs = vs.map((p) => vRotZ(p, deg(extraZ)))
+  if (extraY) vs = vs.map((p) => vRotY(p, deg(extraY)))
+  if (extraX) vs = vs.map((p) => vRotX(p, deg(extraX)))
+  const maxr = Math.max(...vs.map((p) => Math.hypot(p[0], p[1], p[2]))) || 1
+  vs = vs.map((p) => p.map((v) => v / maxr))
+  const fitR = Math.max(...vs.map((p) => Math.hypot(p[0], p[1]))) || 1
+  return { vs, fitR }
+}
+
+/** 机头相对机尾的屏幕方向角（度，0=右 90=上 ±180=左 -90=下）*/
+function noseAngle(vs) {
+  const h = vs[HEAD_I], t = vs[TAIL_I]
+  return (Math.atan2(-(h[1] - t[1]), h[0] - t[0]) * 180) / Math.PI
+}
+
+/**
+ * 把飞机姿态渲染到 ctx 原点（ctx 已 translate 到飞机中心）。
+ * 透视投影 + 双面平面着色 + 机身渐变 + Fresnel 边缘光。
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number[][]} vs       computePose 返回的顶点
+ * @param {number} fitR         computePose 返回的屏幕半径
+ * @param {number} size         屏幕上飞机的目标直径(px)
+ * @param {number} bob          竖向浮动偏移(px)
+ */
+function renderPlane(ctx, vs, fitR, size, bob = 0) {
+  const rad2 = (size * 0.5) / fitR
+  const { camDist, persp } = PLANE_CAM
+  const proj = (p) => {
+    const zc = Math.max(p[2] * persp + camDist, 0.1) / camDist
+    return [(p[0] * rad2) / zc, (p[1] * rad2) / zc]
+  }
+
+  const tris = []
+  for (let k = 0; k < PLANE_IDX.length; k += 3) {
+    const a = PLANE_IDX[k], b = PLANE_IDX[k+1], c = PLANE_IDX[k+2]
+    const pa = proj(vs[a]), pb = proj(vs[b]), pc = proj(vs[c])
+    const e1 = [vs[b][0]-vs[a][0], vs[b][1]-vs[a][1], vs[b][2]-vs[a][2]]
+    const e2 = [vs[c][0]-vs[a][0], vs[c][1]-vs[a][1], vs[c][2]-vs[a][2]]
+    let fn = vNorm([
+      e1[1]*e2[2]-e1[2]*e2[1],
+      e1[2]*e2[0]-e1[0]*e2[2],
+      e1[0]*e2[1]-e1[1]*e2[0],
+    ])
+    if (fn[2] > 0) fn = [-fn[0], -fn[1], -fn[2]]   // 双面光照
+    tris.push({
+      z: (vs[a][2] + vs[b][2] + vs[c][2]) / 3,
+      pts: [pa, pb, pc],
+      fn,
+      gx: (vs[a][0] + vs[b][0] + vs[c][0]) / 3,
+    })
+  }
+  tris.sort((u, v) => v.z - u.z)   // 远 → 近（画家算法）
+
+  ctx.save()
+  ctx.translate(0, bob)
+  for (const t of tris) {
+    const d = t.fn[0]*PLANE_LIGHT[0] + t.fn[1]*PLANE_LIGHT[1] + t.fn[2]*PLANE_LIGHT[2]
+    const diffuse = Math.max(d, 0) + Math.max(-d, 0) * 0.30
+    // 机身纵向渐变：尾部(粉紫) → 中段(淡粉) → 机头(近白)
+    const g = Math.max(0, Math.min(1, (t.gx + 1) / 2))
+    const mix = (A, B, k) => [0,1,2].map((i) => A[i] + (B[i] - A[i]) * k)
+    const base = g < 0.5 ? mix(PLANE_TAIL, PLANE_MID, g * 2) : mix(PLANE_MID, PLANE_NOSE, (g - 0.5) * 2)
+    const shade = 0.55 + 0.62 * diffuse
+    const amb = 1 - Math.min(1, diffuse * 1.35)
+    const fres = Math.pow(1 - Math.abs(d), 3) * 0.22
+    const col = [0,1,2].map((i) =>
+      Math.max(0, Math.min(255, Math.round(
+        base[i] * shade + PLANE_SHADE[i] * amb * 0.34 + PLANE_RIM[i] * fres
+      )))
+    )
+    ctx.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`
+    ctx.beginPath()
+    ctx.moveTo(t.pts[0][0], t.pts[0][1])
+    ctx.lineTo(t.pts[1][0], t.pts[1][1])
+    ctx.lineTo(t.pts[2][0], t.pts[2][1])
+    ctx.closePath()
+    ctx.fill()
+  }
+  ctx.restore()
+}
+
+/* __GEO_END__ */
+
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+
+// 状态
+const S = { z: 131, y: 6, x: 90, r: -20, size: 560 };
+
+/* 姿态计算与渲染全部调用共享模块（见上方 __GEO_START__ 注入区），
+   与网页 HeroPlane.jsx 用的是同一份代码 —— 预览所见即网页所得。 */
+function currentGeo() {
+  return computePose({
+    ...PLANE_POSE,
+    extraZ: S.z - 20,   // 滑块 Z 的基准值 20
+    extraY: S.y,
+    extraX: S.x,
+  })
+}
+
+function draw() {
+  const W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+  const { vs, fitR } = currentGeo();
+  // 平移到画布中心后交给共享渲染函数（与网页同一个 renderPlane）
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  renderPlane(ctx, vs, fitR, S.size, 0);
+  ctx.restore();
+}
+
+
+function sync() {
+  document.getElementById('vz').textContent = S.z;
+  document.getElementById('vy').textContent = S.y;
+  document.getElementById('vx').textContent = S.x;
+  document.getElementById('vr').textContent = S.r;
+  document.getElementById('vs').textContent = S.size;
+  // 输出可直接粘进 planeGeometry.js 的完整参数
+  document.getElementById('out').textContent =
+    `PLANE_POSE = { rot90: ${PLANE_POSE.rot90}, yaw: ${PLANE_POSE.yaw}, pitch: ${PLANE_POSE.pitch}, roll: ${S.r} }`
+    + `\n微调: extraZ: ${S.z - 20}, extraY: ${S.y}, extraX: ${S.x}   (Z 基准值 20)`;
+  draw();
+}
+
+const bind = (id, key) => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => { S[key] = +el.value; sync(); });
+};
+['z','y','x','r','s'].forEach((k,i)=>bind(k, ['z','y','x','r','size'][i]));
+
+document.getElementById('reset').onclick = () => {
+  S.z=131; S.y=6; S.x=90; S.r=-20; S.size=560;
+  document.getElementById('z').value=131; document.getElementById('y').value=6;
+  document.getElementById('x').value=90; document.getElementById('r').value=-20;
+  document.getElementById('s').value=560;
+  sync();
+};
+document.getElementById('fine').onclick = () => {
+  ['z','y','x','r'].forEach(id => document.getElementById(id).step = 1);
+  alert('已切到 ±1° 微调（滑块步长 1°）');
+};
+document.getElementById('coarse').onclick = () => {
+  ['z','y','x','r'].forEach(id => document.getElementById(id).step = 5);
+  alert('已切到 ±5° 粗调（滑块步长 5°）');
+};
+
+sync();
+</script>
+</body>
+</html>

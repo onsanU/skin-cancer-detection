@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>模型管理 · 皮肤癌检测系统管理后台</title>
+  <link rel="stylesheet" href="vendor/adminlte/css/adminlte.min.css">
+  <link rel="stylesheet" href="vendor/bootstrap-icons/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="vendor/overlayscrollbars/overlayscrollbars.min.css">
+  <style>
+    .kpi-card .fs-3 { line-height: 1.15; }
+    .mono { font-family: Consolas, Monaco, monospace; }
+    .tbl-sm td, .tbl-sm th { font-size: 13px; vertical-align: middle; }
+    .tbl-sm.table-striped > tbody > tr:nth-of-type(odd) > * { background: rgba(255,255,255,.03); }
+    .table-light { --bs-table-bg: rgba(255,255,255,.06); --bs-table-color: var(--bs-body-color); }
+    /* 纯 CSS 柱状图：避免引第三方图表库
+       ⚠️ 坑1：柱子的 height 是百分比，父级必须有【确定高度】，否则塌成 0
+       ⚠️ 坑2：每组两根柱（蓝=检测量 / 橙=平均耗时），量纲不同各自归一化 */
+    .bars { display: flex; align-items: stretch; gap: 6px; height: 180px; }
+    .bars .bar-wrap { flex: 1; height: 100%; display: flex; flex-direction: column;
+                      justify-content: flex-end; align-items: center; min-width: 0; }
+    .bars .bar-area { flex: 1 1 auto; width: 100%; display: flex;
+                      align-items: flex-end; justify-content: center; gap: 3px;
+                      min-height: 0; }
+    .bars .bar { flex: 1 1 0; max-width: 22px; min-height: 3px;
+                 border-radius: 3px 3px 0 0; transition: height .3s;
+                 background: linear-gradient(180deg,#3b82f6,#1d4ed8); }
+    .bars .bar.avg { background: linear-gradient(180deg,#f59e0b,#d97706); }
+    .bars .lbl { font-size: 10px; color: var(--bs-secondary-color);
+                 white-space: nowrap; margin-top: 6px; height: 14px; overflow: visible; }
+    .hbars .hb-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .hbars .hb-name { width: 74px; font-size: 12px; color: var(--bs-secondary-color);
+                      text-align: right; font-family: Consolas, monospace; }
+    .hbars .hb-track { flex: 1; height: 18px; background: rgba(255,255,255,.06);
+                       border-radius: 4px; overflow: hidden; }
+    .hbars .hb-fill { height: 100%; border-radius: 4px;
+                      background: linear-gradient(90deg,#10b981,#059669); }
+    .hbars .hb-val { width: 52px; font-size: 12px; font-family: Consolas, monospace; }
+  </style>
+</head>
+<body class="layout-fixed sidebar-expand-lg bg-body-tertiary">
+<div id="app-content">
+
+  <!-- 模型状态 -->
+  <div class="alert alert-info d-flex align-items-start mb-3">
+    <i class="bi bi-robot fs-4 me-2"></i>
+    <div class="flex-grow-1">
+      <strong>模型运行状态</strong>
+      <div class="small mb-0" id="m-summary">加载中…</div>
+    </div>
+    <button class="btn btn-sm btn-outline-primary" id="btn-refresh">
+      <i class="bi bi-arrow-clockwise"></i> 刷新</button>
+  </div>
+
+  <!-- KPI -->
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+      <div class="card h-100 kpi-card"><div class="card-body py-3">
+        <div class="text-secondary small"><i class="bi bi-activity"></i> 累计推理</div>
+        <div class="fs-3 fw-bold" id="k-total">—</div>
+        <div class="small text-secondary">次检测记录</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card h-100 kpi-card"><div class="card-body py-3">
+        <div class="text-secondary small"><i class="bi bi-stopwatch"></i> 平均耗时</div>
+        <div class="fs-3 fw-bold" id="k-avg">—</div>
+        <div class="small text-secondary">毫秒 / 张</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card h-100 kpi-card"><div class="card-body py-3">
+        <div class="text-secondary small"><i class="bi bi-speedometer"></i> P50 / P95</div>
+        <div class="fs-3 fw-bold" id="k-pct">—</div>
+        <div class="small text-secondary">中位数 / 95 分位</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card h-100 kpi-card"><div class="card-body py-3">
+        <div class="text-secondary small"><i class="bi bi-graph-up"></i> 判定分布</div>
+        <div class="fs-3 fw-bold" id="k-dist">—</div>
+        <div class="small text-secondary" id="k-dist-sub">恶性 / 良性</div>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <!-- 耗时趋势 -->
+    <div class="col-12 col-lg-7">
+      <div class="card h-100">
+        <div class="card-header">
+          <i class="bi bi-bar-chart-line"></i> 每日检测量与平均耗时
+          <span class="small text-secondary ms-1" id="trend-days"></span>
+        </div>
+        <div class="card-body">
+          <div class="bars" id="trend-bars"></div>
+          <div class="small text-secondary mt-2">
+            <span class="badge" style="background:#3b82f6">&nbsp;</span> 检测量（次）
+            <span class="badge ms-3" style="background:#f59e0b">&nbsp;</span> 平均耗时（ms）
+            <span class="ms-3 opacity-75">
+              · 两类量纲不同，各自独立缩放以便对比趋势形状，绝对值请悬停查看
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 耗时分布 -->
+    <div class="col-12 col-lg-5">
+      <div class="card h-100">
+        <div class="card-header"><i class="bi bi-stopwatch"></i> 推理耗时分布</div>
+        <div class="card-body hbars" id="hist-bars">
+          <div class="text-secondary small">加载中…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <!-- 模型与运行时信息 -->
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-header"><i class="bi bi-cpu"></i> 模型与运行时</div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0">
+            <tbody id="rt-body"><tr><td class="text-secondary">加载中…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 阈值预设 -->
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-header"><i class="bi bi-sliders"></i> 判定阈值预设</div>
+        <div class="card-body p-0">
+          <table class="table table-sm table-striped mb-0 tbl-sm">
+            <thead class="table-light">
+              <tr><th style="width:110px">模式</th><th style="width:80px">阈值</th><th>说明</th></tr>
+            </thead>
+            <tbody id="preset-body">
+              <tr><td colspan="3" class="text-center text-secondary py-3">加载中…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="vendor/adminlte/js/adminlte.min.js"></script>
+<script src="admin.js"></script>
+<script>
+(function () {
+  'use strict';
+  if (!Admin.guardAdmin()) return;
+  Admin.renderLayout('model.html', '模型管理');
+
+  const $ = (id) => document.getElementById(id);
+
+  function row(k, v, extra) {
+    return `<tr><th class="text-secondary fw-normal" style="width:150px">${k}</th>`
+      + `<td>${v}${extra ? ' <span class="small text-secondary">' + extra + '</span>' : ''}</td></tr>`;
+  }
+
+  function renderTrend(trend) {
+    if (!trend || !trend.length) {
+      $('trend-bars').innerHTML = '<div class="text-secondary small">暂无数据（需要先有检测记录）</div>';
+      return;
+    }
+    const maxC = Math.max(...trend.map((t) => t.count), 1);
+    const maxMs = Math.max(...trend.map((t) => t.avg_ms || 0), 1);
+
+    // 双色柱：蓝=检测量（左，按次数归一），橙=平均耗时（右，按毫秒归一）
+    //   两类量纲不同，各自独立归一化，只用于「看趋势形状」，绝对值看悬停提示
+    $('trend-bars').innerHTML = trend.map((t) => {
+      const hC = Math.max(3, Math.round((t.count / maxC) * 100));
+      const hM = Math.max(3, Math.round(((t.avg_ms || 0) / maxMs) * 100));
+      const md = (t.date || '').slice(5);
+      return `<div class="bar-wrap" title="${t.date}：${t.count} 次检测，平均 ${t.avg_ms}ms">
+        <div class="bar-area">
+          <div class="bar" style="height:${hC}%"></div>
+          <div class="bar avg" style="height:${hM}%"></div>
+        </div>
+        <div class="lbl">${md}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function renderHist(hist) {
+    if (!hist || !hist.length) return;
+    const maxN = Math.max(...hist.map((h) => h.count), 1);
+    const totalN = hist.reduce((s, h) => s + h.count, 0) || 1;
+    $('hist-bars').innerHTML = hist.map((h) => {
+      const w = Math.round((h.count / maxN) * 100);
+      const pct = ((h.count / totalN) * 100).toFixed(1);
+      return `<div class="hb-row">
+        <div class="hb-name">${h.range}ms</div>
+        <div class="hb-track"><div class="hb-fill" style="width:${w}%"></div></div>
+        <div class="hb-val">${h.count} <span class="text-secondary">(${pct}%)</span></div>
+      </div>`;
+    }).join('');
+  }
+
+  async function load() {
+    try {
+      const d = await Admin.api('/model/stats?days=14');
+      const s = d.stats || {}, rt = d.runtime || {}, m = d.model || {};
+
+      // 顶部状态
+      const ready = m.ready !== false && !rt.load_error;
+      $('m-summary').innerHTML = ready
+        ? `后端 <code>${Admin.esc(rt.backend || m.backend || 'pytorch')}</code>，
+           设备 <code>${Admin.esc(rt.device || '—')}</code>，
+           输入 <code>${Admin.esc(String(rt.img_size || '—'))}×${Admin.esc(String(rt.img_size || '—'))}</code>，
+           阈值 <code>${Admin.esc(String(rt.threshold ?? '—'))}</code>
+           ${rt.ensemble_enabled ? '· <span class="text-success">集成模式已启用</span>' : ''}`
+        : `<span class="text-danger">模型未就绪：${Admin.esc(rt.load_error || '未知错误')}</span>`;
+
+      // KPI
+      $('k-total').textContent = s.total ?? 0;
+      $('k-avg').textContent = (s.avg_ms ?? 0) + ' ms';
+      $('k-pct').textContent = `${s.p50_ms ?? 0} / ${s.p95_ms ?? 0}`;
+      const dist = s.dist || {};
+      $('k-dist').textContent = `${dist.malignant ?? 0} / ${dist.benign ?? 0}`;
+      const tot = (dist.malignant || 0) + (dist.benign || 0);
+      $('k-dist-sub').textContent = tot
+        ? `恶性 ${((dist.malignant / tot) * 100).toFixed(1)}% · 良性 ${((dist.benign / tot) * 100).toFixed(1)}%`
+        : '恶性 / 良性';
+
+      renderTrend(s.trend);
+      renderHist(s.hist);
+      $('trend-days').textContent = `近 ${d.days} 天`;
+
+      // 运行时表
+      const members = (rt.ensemble_members || [])
+        .map((x) => `<code>${Admin.esc(x.name)}</code> × ${x.weight}`).join('<br>');
+      $('rt-body').innerHTML = [
+        row('推理后端', Admin.esc(rt.backend || m.backend || '—')),
+        row('设备', Admin.esc(rt.device || '—')),
+        row('输入尺寸', rt.img_size ? rt.img_size + '×' + rt.img_size : '—'),
+        row('集成模式', rt.ensemble_enabled
+          ? '<span class="badge text-bg-success">已启用</span>' : '<span class="badge text-bg-secondary">未启用</span>'),
+        row('集成成员', members || '—'),
+        row('判定阈值', Admin.esc(String(rt.threshold ?? '—'))),
+        row('ONNX 推理', rt.use_onnx ? '是' : '否'),
+        row('7 类预测', rt.type_predict ? '已启用' : '未启用'),
+        row('模型加载', m.load_ms != null ? m.load_ms + ' ms' : '—'),
+        row('耗时区间',
+          `最快 ${s.min_ms ?? 0} ms · 最慢 ${s.max_ms ?? 0} ms`),
+      ].join('');
+
+      // 阈值预设
+      const presets = Object.entries(d.presets || {});
+      $('preset-body').innerHTML = presets.length
+        ? presets.map(([k, v]) => `<tr>
+            <td><span class="badge text-bg-info">${Admin.esc(v.name || k)}</span></td>
+            <td class="mono">${v.value}</td>
+            <td class="small text-secondary">${Admin.esc(v.desc || '')}</td>
+          </tr>`).join('')
+        : '<tr><td colspan="3" class="text-center text-secondary py-3">未配置</td></tr>';
+
+    } catch (e) {
+      $('m-summary').innerHTML = '<span class="text-danger">加载失败：' + Admin.esc(e.message || String(e)) + '</span>';
+    }
+  }
+
+  $('btn-refresh').onclick = load;
+  load();
+})();
+</script>
+</body>
+</html>

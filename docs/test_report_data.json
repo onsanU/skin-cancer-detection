@@ -1,0 +1,265 @@
+{
+  "api": [
+    {
+      "name": "GET /api/health 健康检查",
+      "passed": true,
+      "detail": "model.ready=True",
+      "ms": 5.5
+    },
+    {
+      "name": "GET / 服务信息",
+      "passed": true,
+      "detail": "",
+      "ms": 2.1
+    },
+    {
+      "name": "POST /api/auth/register 注册",
+      "passed": true,
+      "detail": "user_id=31",
+      "ms": 29.4
+    },
+    {
+      "name": "POST /api/auth/register 重复注册拦截",
+      "passed": true,
+      "detail": "HTTP 400",
+      "ms": 1.2
+    },
+    {
+      "name": "POST /api/auth/login 登录",
+      "passed": true,
+      "detail": "",
+      "ms": 22.5
+    },
+    {
+      "name": "POST /api/auth/login 错误密码拦截",
+      "passed": true,
+      "detail": "HTTP 401",
+      "ms": 22.1
+    },
+    {
+      "name": "GET /api/auth/me 用户信息",
+      "passed": true,
+      "detail": "stats={'total': 0, 'malignant': 0, 'benign': 0}",
+      "ms": 2.1
+    },
+    {
+      "name": "GET /api/auth/me 无token拦截",
+      "passed": true,
+      "detail": "HTTP 401",
+      "ms": 1.0
+    },
+    {
+      "name": "GET /api/model/info 模型信息",
+      "passed": true,
+      "detail": "backend=pytorch-ensemble",
+      "ms": 0.9
+    },
+    {
+      "name": "GET /api/thresholds 阈值预设",
+      "passed": true,
+      "detail": "3个预设",
+      "ms": 0.8
+    },
+    {
+      "name": "GET /api/model/types 7类定义",
+      "passed": true,
+      "detail": "7类 模型acc=0.7432",
+      "ms": 0.9
+    },
+    {
+      "name": "集成模式状态",
+      "passed": true,
+      "detail": "集成=True 成员=2个 阈值=0.51",
+      "ms": 0.9
+    },
+    {
+      "name": "7类模型状态",
+      "passed": true,
+      "detail": "ready=True classes=7 err=(无)",
+      "ms": 0.9
+    },
+    {
+      "name": "POST /api/predict 图像检测",
+      "passed": true,
+      "detail": "良性 p=0.5555 mode=ensemble-2",
+      "ms": 102.8
+    },
+    {
+      "name": "类型参考信息返回",
+      "passed": true,
+      "detail": "Top1=良性角化(0.22) TopK=3 良性=0.58/恶性=0.42",
+      "ms": 102.8
+    },
+    {
+      "name": "GET /api/records 历史列表",
+      "passed": true,
+      "detail": "total=1",
+      "ms": 9.4
+    },
+    {
+      "name": "GET /api/records 按结果筛选",
+      "passed": true,
+      "detail": "",
+      "ms": 9.4
+    },
+    {
+      "name": "GET /api/records/stats 统计",
+      "passed": true,
+      "detail": "{'total': 1, 'malignant': 0, 'benign': 1}",
+      "ms": 2.3
+    },
+    {
+      "name": "GET /api/records/{id} 记录详情",
+      "passed": true,
+      "detail": "含健康建议",
+      "ms": 2.5
+    },
+    {
+      "name": "GET /api/records/export CSV导出",
+      "passed": true,
+      "detail": "2行",
+      "ms": 3.2
+    },
+    {
+      "name": "GET /api/image/{name} 图片访问",
+      "passed": true,
+      "detail": "",
+      "ms": 6.8
+    },
+    {
+      "name": "DELETE /api/records/{id} 删除记录",
+      "passed": true,
+      "detail": "",
+      "ms": 7.0
+    }
+  ],
+  "model": {
+    "samples": 213,
+    "total_time_s": 15.6,
+    "accuracy": 0.8545,
+    "malignant_recall": 0.8729,
+    "malignant_precision": 0.8655,
+    "macro_f1": 0.8692,
+    "specificity": 0.8316,
+    "miss_rate": 0.1271,
+    "confusion": {
+      "tn": 79,
+      "fp": 16,
+      "fn": 15,
+      "tp": 103
+    },
+    "latency": {
+      "mean": 22.4,
+      "median": 21.5,
+      "min": 18.6,
+      "max": 46.3,
+      "p95": 28.6
+    },
+    "checks": [
+      {
+        "name": "测试集 213 张完整推理",
+        "passed": true,
+        "detail": "acc=0.8545 recall=0.8729 latency=22.4ms",
+        "ms": null
+      }
+    ]
+  },
+  "boundary": [
+    {
+      "name": "上传 .txt 文件被拒绝",
+      "passed": true,
+      "detail": "HTTP 400",
+      "ms": null
+    },
+    {
+      "name": "上传 11MB 文件被拒绝",
+      "passed": true,
+      "detail": "HTTP 400",
+      "ms": null
+    },
+    {
+      "name": "路径穿越攻击被拦截",
+      "passed": true,
+      "detail": "HTTP 404",
+      "ms": null
+    },
+    {
+      "name": "查询不存在记录返回404",
+      "passed": true,
+      "detail": "HTTP 404",
+      "ms": null
+    },
+    {
+      "name": "非法 label 参数被拒绝",
+      "passed": true,
+      "detail": "HTTP 400",
+      "ms": null
+    },
+    {
+      "name": "越权访问他人记录被拦截",
+      "passed": true,
+      "detail": "HTTP 404",
+      "ms": null
+    },
+    {
+      "name": "非法邮箱格式被拒绝",
+      "passed": true,
+      "detail": "HTTP 422",
+      "ms": null
+    },
+    {
+      "name": "密码过短被拒绝",
+      "passed": true,
+      "detail": "HTTP 422",
+      "ms": null
+    },
+    {
+      "name": "阈值参数实际生效",
+      "passed": true,
+      "detail": "临界样本(0.4445) 0.32→恶性 / 0.50→良性",
+      "ms": null
+    }
+  ],
+  "concurrency": {
+    "1_threads": {
+      "requests": 5,
+      "success": 5,
+      "elapsed_s": 0.34,
+      "qps": 14.7,
+      "avg_latency_ms": 68.2
+    },
+    "4_threads": {
+      "requests": 20,
+      "success": 20,
+      "elapsed_s": 1.24,
+      "qps": 16.1,
+      "avg_latency_ms": 62.2
+    },
+    "8_threads": {
+      "requests": 40,
+      "success": 40,
+      "elapsed_s": 2.49,
+      "qps": 16.0,
+      "avg_latency_ms": 62.4
+    }
+  },
+  "summary": {
+    "frontend_build": {
+      "passed": true,
+      "output": [
+        "dist/index.html                   0.47 kB │ gzip:  0.40 kB",
+        "dist/assets/index-DM8waR8d.css   20.02 kB │ gzip:  4.65 kB",
+        "dist/assets/index-BEZnnjVm.js   249.91 kB │ gzip: 82.67 kB",
+        "✓ built in 6.38s"
+      ]
+    },
+    "api": {
+      "total": 22,
+      "passed": 22
+    },
+    "boundary": {
+      "total": 9,
+      "passed": 9
+    }
+  }
+}

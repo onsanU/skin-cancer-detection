@@ -1,0 +1,16 @@
+{
+  "name": "skin-ppt",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "bash verify.sh",
+    "gen": "node gen.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "pptxgenjs": "^3.12.0"
+  }
+}

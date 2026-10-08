@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>管理员登录 · 皮肤癌图像检测系统</title>
+  <link rel="stylesheet" href="vendor/adminlte/css/adminlte.min.css">
+  <link rel="stylesheet" href="vendor/bootstrap-icons/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="vendor/overlayscrollbars/overlayscrollbars.min.css">
+  <style>
+    body.login-page {
+      min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #0b4f6c 0%, #01baef 100%);
+      margin: 0;
+    }
+    .login-box { width: 100%; max-width: 420px; padding: 16px; }
+    .login-card { border: 0; border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,.45);
+                   background: rgba(20,25,33,.92); backdrop-filter: blur(6px); }
+    .login-logo { text-align: center; color: #fff; margin-bottom: 18px; }
+    .login-logo i { font-size: 42px; }
+    .login-logo h1 { font-size: 20px; margin: 8px 0 2px; font-weight: 700; color: #fff; }
+    .login-logo p { margin: 0; font-size: 12.5px; color: rgba(255,255,255,.85); }
+    .brand-badge {
+      display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 20px;
+      background: rgba(255,255,255,.2); color: #fff; margin-top: 8px;
+    }
+  </style>
+</head>
+<body class="login-page">
+  <div class="login-box">
+    <div class="login-logo">
+      <i class="bi bi-shield-lock-fill"></i>
+      <h1>皮肤癌图像检测系统</h1>
+      <p>管理后台 · Admin Console</p>
+      <span class="brand-badge">AdminLTE v4</span>
+    </div>
+    <div class="card login-card">
+      <div class="card-body p-4">
+        <h2 class="h5 mb-1">管理员登录</h2>
+        <p class="text-muted small mb-3">请使用管理员账号登录（普通用户无权访问）</p>
+        <form id="loginForm" autocomplete="off">
+          <div class="input-group mb-3">
+            <input type="text" class="form-control" id="username" placeholder="用户名" required>
+            <span class="input-group-text"><i class="bi bi-person"></i></span>
+          </div>
+          <div class="input-group mb-3">
+            <input type="password" class="form-control" id="password" placeholder="密码" required>
+            <span class="input-group-text"><i class="bi bi-key"></i></span>
+          </div>
+          <div class="alert alert-danger py-2 small d-none" id="errBox"></div>
+          <div class="d-grid">
+            <button type="submit" class="btn btn-primary" id="submitBtn">
+              <i class="bi bi-box-arrow-in-right"></i> 登 录
+            </button>
+          </div>
+        </form>
+        <hr class="my-3">
+        <div class="d-flex justify-content-between align-items-center small">
+          <a href="/app/" class="text-decoration-none">
+            <i class="bi bi-arrow-left"></i> 返回检测系统
+          </a>
+          <span class="text-muted">默认管理员：admin</span>
+        </div>
+      </div>
+    </div>
+    <p class="text-center small mt-3" style="color:rgba(255,255,255,.75)">
+      ⚠️ 医疗免责声明：本系统仅为辅助工具，结果不构成医疗诊断
+    </p>
+  </div>
+
+  <script src="vendor/adminlte/js/bootstrap.bundle.min.js"></script>
+  <script src="vendor/adminlte/js/adminlte.min.js"></script>
+  <script>
+  const API = '/api';
+  const KEY_TOKEN = 'skin_token';
+  const KEY_USER  = 'skin_admin_user';
+
+  document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('submitBtn');
+    const errBox = document.getElementById('errBox');
+    errBox.classList.add('d-none');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 登录中...';
+
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+
+    try {
+      const r = await fetch(API + '/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        errBox.textContent = data.detail || '登录失败';
+        errBox.classList.remove('d-none');
+        return;
+      }
+      // 必须是管理员
+      if (!data.user || data.user.role !== 'admin') {
+        errBox.textContent = '该账号不是管理员，无权访问管理后台';
+        errBox.classList.remove('d-none');
+        return;
+      }
+      localStorage.setItem(KEY_TOKEN, data.token);
+      localStorage.setItem(KEY_USER, JSON.stringify(data.user));
+      location.href = 'index.html';
+    } catch (err) {
+      errBox.textContent = '网络错误：' + err.message;
+      errBox.classList.remove('d-none');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-box-arrow-in-right"></i> 登 录';
+    }
+  });
+  </script>
+</body>
+</html>

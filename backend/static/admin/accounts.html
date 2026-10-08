@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>账号管理 · 皮肤癌检测系统管理后台</title>
+  <link rel="stylesheet" href="vendor/adminlte/css/adminlte.min.css">
+  <link rel="stylesheet" href="vendor/bootstrap-icons/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="vendor/overlayscrollbars/overlayscrollbars.min.css">
+  <style>
+    .tbl-sm td, .tbl-sm th { font-size: 13px; vertical-align: middle; }
+    .tbl-sm.table-striped > tbody > tr:nth-of-type(odd) > * {
+      background: rgba(255,255,255,.03);
+    }
+    .tbl-sm.table-striped > tbody > tr > * { border-color: rgba(255,255,255,.08); }
+    .table-light { --bs-table-bg: rgba(255,255,255,.06); --bs-table-color: var(--bs-body-color); }
+    .avatar { width: 34px; height: 34px; border-radius: 50%; color: #fff;
+              display: inline-flex; align-items: center; justify-content: center;
+              font-size: 14px; font-weight: 600; }
+    .avatar.admin { background: linear-gradient(135deg,#c0392b,#e74c3c); }
+    .avatar.user { background: linear-gradient(135deg,#0b6fa4,#01b8e8); }
+    .avatar.off { background: #adb5bd; }
+    .me-row { background: rgba(255,193,7,.14) !important; }
+  </style>
+</head>
+<body class="layout-fixed sidebar-expand-lg bg-body-tertiary">
+<div id="app-content">
+  <!-- 安全提示 -->
+  <div class="alert alert-info d-flex align-items-start mb-3">
+    <i class="bi bi-shield-lock fs-4 me-2"></i>
+    <div>
+      <strong>账号管理说明</strong>
+      <div class="small mb-0">
+        密码以 PBKDF2 哈希存储，<strong>无法查看明文</strong>，只能重置；
+        系统始终保留至少一名可用管理员，管理员不能降级/禁用自己。
+      </div>
+    </div>
+  </div>
+
+  <!-- 筛选 -->
+  <div class="card mb-3"><div class="card-body py-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label small mb-1">角色</label>
+        <select class="form-select form-select-sm" id="f-role">
+          <option value="">全部角色</option>
+          <option value="admin">管理员</option>
+          <option value="user">普通用户</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small mb-1">关键词</label>
+        <input class="form-control form-control-sm" id="f-keyword"
+               placeholder="用户名 / 邮箱 / 姓名">
+      </div>
+      <div class="col-md-5 d-flex gap-2">
+        <button class="btn btn-sm btn-primary" id="btn-search">
+          <i class="bi bi-search"></i> 查询</button>
+        <button class="btn btn-sm btn-outline-secondary" id="btn-reset">
+          <i class="bi bi-arrow-counterclockwise"></i> 重置</button>
+        <button class="btn btn-sm btn-outline-secondary ms-auto" id="btn-reload">
+          <i class="bi bi-arrow-clockwise"></i> 刷新</button>
+      </div>
+    </div>
+  </div></div>
+
+  <!-- 账号表 -->
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h3 class="card-title mb-0"><i class="bi bi-person-gear me-1"></i> 账号列表
+        <span class="badge text-bg-secondary ms-1" id="totalBadge">—</span></h3>
+      <span class="text-muted small">共 <span id="adminCount">0</span> 名管理员</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover tbl-sm mb-0">
+          <thead class="table-light"><tr>
+            <th style="width:60px">ID</th>
+            <th>账号</th>
+            <th>邮箱</th>
+            <th style="width:96px">角色</th>
+            <th style="width:86px">状态</th>
+            <th style="width:88px" class="text-end">检测数</th>
+            <th style="width:150px">注册时间</th>
+            <th style="width:250px">操作</th>
+          </tr></thead>
+          <tbody id="tbody">
+            <tr><td colspan="8" class="text-center text-muted py-4">加载中…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card-footer d-flex justify-content-between align-items-center">
+      <span class="text-muted small" id="pageInfo">—</span>
+      <div id="pagerBox"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 重置密码弹窗 -->
+<div class="modal fade" id="pwdModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-key me-1"></i> 重置密码</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-2">为用户 <strong id="pwdUser"></strong> 设置新密码（至少 6 位）：</p>
+        <div class="input-group">
+          <input type="text" class="form-control" id="pwdInput" placeholder="新密码">
+          <button class="btn btn-outline-secondary" type="button" id="btn-gen" title="随机生成">
+            <i class="bi bi-dice-5"></i> 随机</button>
+        </div>
+        <div class="form-text">密码重置后该用户需用新密码登录，旧密码立即失效。</div>
+        <div class="alert alert-warning py-2 mt-2 mb-0 small">
+          <i class="bi bi-exclamation-triangle"></i>
+          请通过安全渠道告知用户；明文密码不落库，关闭后无法再次查看。
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-warning" id="btn-do-reset">
+          <i class="bi bi-check-lg"></i> 确认重置</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/adminlte/js/bootstrap.bundle.min.js"></script>
+<script src="vendor/adminlte/js/adminlte.min.js"></script>
+<script src="admin.js"></script>
+<script>
+let state = { limit: 20, offset: 0, role: '', keyword: '', total: 0, items: [] };
+let pwdModal = null, pwdTargetId = null;
+const ME = Admin.getUser() || {};
+
+if (Admin.guardAdmin()) {
+  Admin.renderLayout('accounts.html', '账号管理');
+  pwdModal = new bootstrap.Modal(document.getElementById('pwdModal'));
+  const q = new URLSearchParams(location.search);
+  if (q.get('keyword')) document.getElementById('f-keyword').value = q.get('keyword');
+  if (q.get('role')) document.getElementById('f-role').value = q.get('role');
+  syncF();
+
+  document.getElementById('btn-search').onclick = () => { syncF(); state.offset = 0; load(); };
+  document.getElementById('btn-reset').onclick = () => {
+    document.getElementById('f-role').value = '';
+    document.getElementById('f-keyword').value = '';
+    state.role = ''; state.keyword = ''; state.offset = 0;
+    history.replaceState(null, '', 'accounts.html');
+    load();
+  };
+  document.getElementById('btn-reload').onclick = () => load();
+  document.getElementById('f-keyword').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { syncF(); state.offset = 0; load(); }
+  });
+  document.getElementById('btn-gen').onclick = () => {
+    const abc = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    let s = 'Skin@';
+    const arr = new Uint32Array(10);
+    crypto.getRandomValues(arr);
+    for (let i = 0; i < 10; i++) s += abc[arr[i] % abc.length];
+    document.getElementById('pwdInput').value = s;
+  };
+  document.getElementById('btn-do-reset').onclick = doReset;
+  load();
+}
+
+function syncF() {
+  state.role = document.getElementById('f-role').value;
+  state.keyword = document.getElementById('f-keyword').value.trim();
+}
+
+function qs() {
+  const p = new URLSearchParams();
+  p.set('limit', state.limit); p.set('offset', state.offset);
+  if (state.role) p.set('role', state.role);
+  if (state.keyword) p.set('keyword', state.keyword);
+  return p.toString();
+}
+
+async function load() {
+  const tb = document.getElementById('tbody');
+  tb.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">加载中…</td></tr>';
+  try {
+    const d = await Admin.api('/users?' + qs());
+    state.total = d.total;
+    state.items = d.items;
+    document.getElementById('totalBadge').textContent = d.total + ' 个账号';
+    document.getElementById('adminCount').textContent =
+      d.items.filter(u => u.role === 'admin').length;
+
+    if (!d.items.length) {
+      tb.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-5">' +
+        '<i class="bi bi-inbox fs-3 d-block mb-2"></i>没有符合条件的账号</td></tr>';
+    } else {
+      tb.innerHTML = d.items.map(u => {
+        const isAdmin = u.role === 'admin';
+        const isMe = u.id === ME.id;
+        const cls = !u.is_active ? 'off' : (isAdmin ? 'admin' : 'user');
+        return '<tr class="' + (isMe ? 'me-row' : '') + '">' +
+          '<td class="text-muted">#' + u.id + '</td>' +
+          '<td><span class="avatar ' + cls + ' me-2">' +
+            Admin.esc((u.username || '?')[0].toUpperCase()) + '</span>' +
+            '<span class="fw-semibold">' + Admin.esc(u.username) + '</span>' +
+            (isMe ? ' <span class="badge text-bg-warning">当前登录</span>' : '') +
+            (u.full_name ? '<div class="text-muted" style="font-size:11.5px">' +
+              Admin.esc(u.full_name) + '</div>' : '') + '</td>' +
+          '<td class="text-muted" style="font-size:12px">' + Admin.esc(u.email) + '</td>' +
+          '<td>' + (isAdmin ? '<span class="badge text-bg-danger">管理员</span>'
+                            : '<span class="badge text-bg-secondary">普通用户</span>') + '</td>' +
+          '<td>' + (u.is_active
+            ? '<span class="badge text-bg-success">正常</span>'
+            : '<span class="badge text-bg-dark">已禁用</span>') + '</td>' +
+          '<td class="text-end">' + u.record_count + '</td>' +
+          '<td class="text-muted" style="font-size:12px">' + Admin.fmtTime(u.created_at) + '</td>' +
+          '<td>' +
+            // 角色切换
+            (isAdmin
+              ? '<button class="btn btn-sm btn-outline-secondary py-0 px-2" ' +
+                (isMe ? 'disabled title="不能降级自己"' :
+                        'onclick="setRole(' + u.id + ',\'user\')" title="降为普通用户"') +
+                '><i class="bi bi-arrow-down-circle"></i> 降级</button>'
+              : '<button class="btn btn-sm btn-outline-danger py-0 px-2" ' +
+                'onclick="setRole(' + u.id + ',\'admin\')" title="提升为管理员">' +
+                '<i class="bi bi-arrow-up-circle"></i> 提权</button>') +
+            // 密码
+            '<button class="btn btn-sm btn-outline-warning py-0 px-2 ms-1" ' +
+              'onclick="openPwd(' + u.id + ',\'' + Admin.esc(u.username) + '\')" title="重置密码">' +
+              '<i class="bi bi-key"></i></button>' +
+            // 启用/禁用
+            //   ⚠️ 禁用按钮原用 btn-outline-dark，在深色主题下边框/图标几乎与背景同色（看不清）
+            //   改为 outline-warning（禁用属敏感操作，用醒目色提示），并补上文字标签
+            (u.is_active
+              ? '<button class="btn btn-sm btn-outline-warning py-0 px-2 ms-1" ' +
+                (isMe ? 'disabled title="不能禁用自己"' :
+                        'onclick="setActive(' + u.id + ',false)" title="禁用账号"') +
+                '><i class="bi bi-slash-circle"></i></button>'
+              : '<button class="btn btn-sm btn-outline-success py-0 px-2 ms-1" ' +
+                'onclick="setActive(' + u.id + ',true)" title="启用账号">' +
+                '<i class="bi bi-check-circle"></i></button>') +
+            // 清空记录
+            '<button class="btn btn-sm btn-outline-danger py-0 px-2 ms-1" ' +
+              'onclick="clearRecords(' + u.id + ',\'' + Admin.esc(u.username) + '\',' +
+              u.record_count + ')" title="清空该用户检测记录">' +
+              '<i class="bi bi-eraser"></i></button>' +
+          '</td></tr>';
+      }).join('');
+    }
+    renderPager();
+  } catch (e) {
+    tb.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">加载失败：' +
+      Admin.esc(e.message) + '</td></tr>';
+  }
+}
+
+function renderPager() {
+  const p = Admin.pager(state.total, state.limit, state.offset);
+  document.getElementById('pagerBox').innerHTML = p.html;
+  const from = state.total ? state.offset + 1 : 0;
+  const to = Math.min(state.offset + state.limit, state.total);
+  document.getElementById('pageInfo').textContent =
+    '第 ' + from + '-' + to + ' 条 / 共 ' + state.total + ' 个账号 · 第 ' + p.cur + '/' + p.pages + ' 页';
+  p.bind(page => { state.offset = (page - 1) * state.limit; load(); });
+}
+
+async function setRole(id, role) {
+  const label = role === 'admin' ? '提升为管理员' : '降为普通用户';
+  const ok = await Admin.confirmBox('确定将该账号' + label + '吗？', '角色变更');
+  if (!ok) return;
+  try {
+    const r = await Admin.api('/users/' + id + '/role', { method: 'POST', body: { role } });
+    Admin.toast(r.message || '操作成功');
+    load();
+  } catch (e) {
+    Admin.toast('操作失败：' + e.message, 'danger');
+  }
+}
+
+async function setActive(id, active) {
+  const ok = await Admin.confirmBox(
+    active ? '确定启用该账号吗？' : '确定禁用该账号吗？禁用后该用户将无法登录。', '账号状态');
+  if (!ok) return;
+  try {
+    const r = await Admin.api('/users/' + id + '/active',
+      { method: 'POST', body: { is_active: active } });
+    Admin.toast(r.message || '操作成功');
+    load();
+  } catch (e) {
+    Admin.toast('操作失败：' + e.message, 'danger');
+  }
+}
+
+function openPwd(id, username) {
+  pwdTargetId = id;
+  document.getElementById('pwdUser').textContent = username + ' (#' + id + ')';
+  document.getElementById('pwdInput').value = '';
+  pwdModal.show();
+}
+
+async function doReset() {
+  const pwd = document.getElementById('pwdInput').value.trim();
+  if (pwd.length < 6) { Admin.toast('密码至少 6 位', 'warning'); return; }
+  const ok = await Admin.confirmBox(
+    '确定重置该账号密码吗？旧密码将立即失效。', '重置密码');
+  if (!ok) return;
+  try {
+    const r = await Admin.api('/users/' + pwdTargetId + '/password',
+      { method: 'POST', body: { password: pwd } });
+    pwdModal.hide();
+    Admin.toast('密码已重置为：' + pwd, 'success');
+  } catch (e) {
+    Admin.toast('重置失败：' + e.message, 'danger');
+  }
+}
+
+async function clearRecords(id, username, count) {
+  if (!count) { Admin.toast('该用户暂无检测记录', 'info'); return; }
+  const ok = await Admin.confirmBox(
+    '确定清空用户 ' + username + ' 的全部 ' + count + ' 条检测记录吗？此操作不可恢复。',
+    '清空检测记录');
+  if (!ok) return;
+  try {
+    const r = await Admin.api('/users/' + id + '/records', { method: 'DELETE' });
+    Admin.toast(r.message || '已清空');
+    load();
+  } catch (e) {
+    Admin.toast('操作失败：' + e.message, 'danger');
+  }
+}
+</script>
+</body>
+</html>

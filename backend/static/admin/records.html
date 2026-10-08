@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>检测记录 · 皮肤癌检测系统管理后台</title>
+  <link rel="stylesheet" href="vendor/adminlte/css/adminlte.min.css">
+  <link rel="stylesheet" href="vendor/bootstrap-icons/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="vendor/overlayscrollbars/overlayscrollbars.min.css">
+  <style>
+    .thumb { width: 54px; height: 54px; object-fit: cover; border-radius: 8px;
+             border: 1px solid rgba(255,255,255,.15); cursor: pointer;
+             background: rgba(255,255,255,.06); }
+    .thumb:hover { border-color: #4da3ff; }
+    .tbl-sm td, .tbl-sm th { font-size: 13px; vertical-align: middle; }
+    .tbl-sm.table-striped > tbody > tr:nth-of-type(odd) > * {
+      background: rgba(255,255,255,.03);
+    }
+    .tbl-sm.table-striped > tbody > tr > * { border-color: rgba(255,255,255,.08); }
+    .table-light { --bs-table-bg: rgba(255,255,255,.06); --bs-table-color: var(--bs-body-color); }
+    .badge-mal { background: #e74c3c; }
+    .badge-ben { background: #27ae60; }
+    .prob-bar { height: 6px; border-radius: 4px; background: rgba(255,255,255,.10); overflow: hidden;
+                width: 76px; display: inline-block; vertical-align: middle; }
+    .prob-bar > div { height: 100%; }
+    .detail-img { max-width: 100%; max-height: 320px; border-radius: 10px; }
+    /* 问答气泡（详情弹窗内还原对话） */
+    .bubble-row { display: flex; margin-bottom: 12px; }
+    .bubble-row.me { justify-content: flex-end; }
+    .bubble { max-width: 78%; border-radius: 12px; padding: 9px 13px; font-size: 13.5px;
+              line-height: 1.65; word-break: break-word; white-space: pre-wrap; }
+    .bubble-row.me .bubble { background: #0d6efd; color: #fff; border-bottom-right-radius: 3px; }
+    .bubble-row.ai .bubble { background: rgba(255,255,255,.08); color: var(--bs-body-color);
+                             border-bottom-left-radius: 3px; }
+    .bubble-meta { font-size: 11px; color: var(--bs-secondary-color); margin-top: 4px; }
+    .bubble-img { max-width: 200px; border-radius: 8px; margin-bottom: 6px; display: block; }
+    /* 表格里长文本截断 */
+    .cell-clip { max-width: 300px; overflow: hidden; text-overflow: ellipsis;
+                 white-space: nowrap; display: inline-block; vertical-align: bottom; }
+  </style>
+</head>
+<body class="layout-fixed sidebar-expand-lg bg-body-tertiary">
+<div id="app-content">
+  <!-- 视图切换：图像检测 / 问答记录
+       ⚠️ 两套数据分表存放（records vs chat_sessions），用 tab 参数区分；
+          表格列与筛选条件完全不同，故切换时整体重渲染（不共用表格）。 -->
+  <ul class="nav nav-pills mb-3" id="mainTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="tab-record" data-bs-toggle="pill"
+              data-tab="record" type="button" role="tab">
+        <i class="bi bi-images me-1"></i> 图像检测
+        <span class="badge text-bg-secondary ms-1" id="badgeRecord">—</span>
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-chat" data-bs-toggle="pill"
+              data-tab="chat" type="button" role="tab">
+        <i class="bi bi-chat-dots me-1"></i> 问答记录
+        <span class="badge text-bg-info ms-1" id="badgeChat">—</span>
+      </button>
+    </li>
+  </ul>
+
+  <!-- ============ 视图 A：图像检测记录 ============ -->
+  <div id="view-record">
+  <!-- 筛选卡 -->
+  <div class="card mb-3">
+    <div class="card-body py-3">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label small mb-1">检测结果</label>
+          <select class="form-select form-select-sm" id="f-label">
+            <option value="">全部</option>
+            <option value="malignant">恶性</option>
+            <option value="benign">良性</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small mb-1">关键词</label>
+          <input class="form-control form-control-sm" id="f-keyword"
+                 placeholder="文件名 / 用户名 / 备注">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small mb-1">用户名（精确）</label>
+          <input class="form-control form-control-sm" id="f-username" placeholder="如 admin">
+        </div>
+        <div class="col-md-3 d-flex gap-2">
+          <button class="btn btn-sm btn-primary flex-fill" id="btn-search">
+            <i class="bi bi-search"></i> 查询</button>
+          <button class="btn btn-sm btn-outline-secondary" id="btn-reset">
+            <i class="bi bi-arrow-counterclockwise"></i> 重置</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 列表卡 -->
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h3 class="card-title mb-0">
+        <i class="bi bi-images me-1"></i> 检测记录
+        <span class="badge text-bg-secondary ms-1" id="totalBadge">—</span>
+      </h3>
+      <div class="d-flex gap-2 align-items-center">
+        <select class="form-select form-select-sm" id="f-limit" style="width:auto">
+          <option value="20">20 条/页</option>
+          <option value="50">50 条/页</option>
+          <option value="100">100 条/页</option>
+        </select>
+        <button class="btn btn-sm btn-outline-secondary" id="btn-reload">
+          <i class="bi bi-arrow-clockwise"></i></button>
+      </div>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover tbl-sm mb-0">
+          <thead class="table-light"><tr>
+            <th style="width:60px">ID</th>
+            <th style="width:76px">图像</th>
+            <th>原始文件名</th>
+            <th style="width:100px">用户</th>
+            <th style="width:90px">结果</th>
+            <th style="width:150px">恶性概率</th>
+            <th style="width:80px">阈值</th>
+            <th style="width:88px">耗时</th>
+            <th style="width:150px">检测时间</th>
+            <th style="width:110px">操作</th>
+          </tr></thead>
+          <tbody id="tbody">
+            <tr><td colspan="10" class="text-center text-muted py-4">加载中…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card-footer d-flex justify-content-between align-items-center">
+      <span class="text-muted small" id="pageInfo">—</span>
+      <div id="pagerBox"></div>
+    </div>
+  </div>
+  </div><!-- /view-record -->
+
+  <!-- ============ 视图 B：问答记录 ============ -->
+  <div id="view-chat" class="d-none">
+    <div class="card mb-3">
+      <div class="card-body py-3">
+        <div class="row g-2 align-items-end">
+          <div class="col-md-4">
+            <label class="form-label small mb-1">关键词</label>
+            <input class="form-control form-control-sm" id="c-keyword"
+                   placeholder="会话标题 / 用户名">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small mb-1">用户名（精确）</label>
+            <input class="form-control form-control-sm" id="c-username" placeholder="如 admin">
+          </div>
+          <div class="col-md-5 d-flex gap-2 align-items-end">
+            <button class="btn btn-sm btn-primary" id="c-search">
+              <i class="bi bi-search"></i> 查询</button>
+            <button class="btn btn-sm btn-outline-secondary" id="c-reset">
+              <i class="bi bi-arrow-counterclockwise"></i> 重置</button>
+            <select class="form-select form-select-sm ms-auto" id="c-limit" style="width:auto">
+              <option value="20">20 条/页</option>
+              <option value="50">50 条/页</option>
+              <option value="100">100 条/页</option>
+            </select>
+            <button class="btn btn-sm btn-outline-secondary" id="c-reload">
+              <i class="bi bi-arrow-clockwise"></i></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h3 class="card-title mb-0">
+          <i class="bi bi-chat-dots me-1"></i> 医疗问答会话
+          <span class="badge text-bg-info ms-1" id="chatTotalBadge">—</span>
+        </h3>
+        <span class="text-muted small">
+          <i class="bi bi-info-circle me-1"></i>会话与图像检测分表存放，统计口径独立
+        </span>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover tbl-sm mb-0">
+            <thead class="table-light"><tr>
+              <th style="width:60px">ID</th>
+              <th>会话标题</th>
+              <th style="width:110px">用户</th>
+              <th style="width:80px">消息数</th>
+              <th>首条提问</th>
+              <th style="width:150px">创建时间</th>
+              <th style="width:150px">最后活动</th>
+              <th style="width:110px">操作</th>
+            </tr></thead>
+            <tbody id="chatBody">
+              <tr><td colspan="8" class="text-center text-muted py-4">加载中…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card-footer d-flex justify-content-between align-items-center">
+        <span class="text-muted small" id="chatPageInfo">—</span>
+        <div id="chatPagerBox"></div>
+      </div>
+    </div>
+  </div><!-- /view-chat -->
+</div>
+
+<!-- 详情弹窗（图像检测） -->
+<div class="modal fade" id="detailModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-file-earmark-medical me-1"></i> 检测详情</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="detailBody">
+        <div class="text-center py-4"><div class="spinner-border"></div></div>
+      </div>
+      <div class="modal-footer">
+        <span class="text-muted small me-auto" id="detailId"></span>
+        <button class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 详情弹窗（问答会话）—— 以对话气泡形式还原完整问答 -->
+<div class="modal fade" id="chatModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-chat-dots me-1"></i> 问答会话详情</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="chatBodyModal">
+        <div class="text-center py-4"><div class="spinner-border"></div></div>
+      </div>
+      <div class="modal-footer">
+        <span class="text-muted small me-auto" id="chatModalId"></span>
+        <button class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/adminlte/js/bootstrap.bundle.min.js"></script>
+<script src="vendor/adminlte/js/adminlte.min.js"></script>
+<script src="admin.js"></script>
+<script>
+let state = { limit: 20, offset: 0, label: '', keyword: '', username: '', total: 0 };
+let chatState = { limit: 20, offset: 0, keyword: '', username: '', total: 0 };
+let detailModal = null;
+let chatModal = null;
+let curTab = 'record';   // record | chat
+
+if (Admin.guardAdmin()) {
+  Admin.renderLayout('records.html', '检测记录管理');
+  detailModal = new bootstrap.Modal(document.getElementById('detailModal'));
+  chatModal = new bootstrap.Modal(document.getElementById('chatModal'));
+
+  // URL 参数：username（从看板 Top 用户点进来）、label、tab=chat（从看板问答列点进来）
+  const q = new URLSearchParams(location.search);
+  if (q.get('username')) { state.username = q.get('username'); chatState.username = q.get('username'); }
+  if (q.get('label')) state.label = q.get('label');
+  document.getElementById('f-username').value = state.username;
+  document.getElementById('f-label').value = state.label;
+  document.getElementById('c-username').value = chatState.username;
+
+  // ---------- 视图切换 ----------
+  document.querySelectorAll('#mainTabs [data-tab]').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
+
+  // ---------- 图像检测 ----------
+  document.getElementById('btn-search').onclick = () => { syncFilters(); state.offset = 0; load(); };
+  document.getElementById('btn-reset').onclick = () => {
+    document.getElementById('f-label').value = '';
+    document.getElementById('f-keyword').value = '';
+    document.getElementById('f-username').value = '';
+    state = { limit: state.limit, offset: 0, label: '', keyword: '', username: '', total: 0 };
+    history.replaceState(null, '', 'records.html' + (curTab === 'chat' ? '?tab=chat' : ''));
+    load();
+  };
+  document.getElementById('f-limit').onchange = e => {
+    state.limit = parseInt(e.target.value, 10); state.offset = 0; load();
+  };
+  document.getElementById('btn-reload').onclick = () => load();
+  document.getElementById('f-keyword').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { syncFilters(); state.offset = 0; load(); }
+  });
+
+  // ---------- 问答记录 ----------
+  document.getElementById('c-search').onclick = () => { syncChatFilters(); chatState.offset = 0; loadChats(); };
+  document.getElementById('c-reset').onclick = () => {
+    document.getElementById('c-keyword').value = '';
+    document.getElementById('c-username').value = '';
+    chatState = { limit: chatState.limit, offset: 0, keyword: '', username: '', total: 0 };
+    loadChats();
+  };
+  document.getElementById('c-limit').onchange = e => {
+    chatState.limit = parseInt(e.target.value, 10); chatState.offset = 0; loadChats();
+  };
+  document.getElementById('c-reload').onclick = () => loadChats();
+  document.getElementById('c-keyword').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { syncChatFilters(); chatState.offset = 0; loadChats(); }
+  });
+
+  // 角标：两个 tab 的总数都拉一次（让用户切换前就知道各自有多少）
+  loadBadges();
+
+  // 初始视图：URL 带 tab=chat 时直接开问答视图
+  switchTab(q.get('tab') === 'chat' ? 'chat' : 'record');
+}
+
+/** 切换视图（tab）：显示对应容器并触发首次加载 */
+function switchTab(tab) {
+  curTab = tab === 'chat' ? 'chat' : 'record';
+  document.getElementById('view-record').classList.toggle('d-none', curTab !== 'record');
+  document.getElementById('view-chat').classList.toggle('d-none', curTab !== 'chat');
+  document.getElementById('tab-record').classList.toggle('active', curTab === 'record');
+  document.getElementById('tab-chat').classList.toggle('active', curTab === 'chat');
+  history.replaceState(null, '', 'records.html' + (curTab === 'chat' ? '?tab=chat' : ''));
+  if (curTab === 'record') load(); else loadChats();
+}
+
+/** 两个视图的总数角标（各自独立统计口径） */
+async function loadBadges() {
+  try {
+    const [r, c] = await Promise.all([
+      Admin.api('/records?limit=1&offset=0'),
+      Admin.api('/chats?limit=1&offset=0'),
+    ]);
+    document.getElementById('badgeRecord').textContent = r.total + ' 条';
+    document.getElementById('badgeChat').textContent = c.total + ' 个';
+  } catch (e) { /* 角标失败不影响主流程 */ }
+}
+
+function syncChatFilters() {
+  chatState.keyword = document.getElementById('c-keyword').value.trim();
+  chatState.username = document.getElementById('c-username').value.trim();
+}
+
+function chatQs() {
+  const p = new URLSearchParams();
+  p.set('limit', chatState.limit);
+  p.set('offset', chatState.offset);
+  if (chatState.keyword) p.set('keyword', chatState.keyword);
+  if (chatState.username) p.set('username', chatState.username);
+  return p.toString();
+}
+
+async function loadChats() {
+  const tb = document.getElementById('chatBody');
+  tb.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">加载中…</td></tr>';
+  try {
+    const d = await Admin.api('/chats?' + chatQs());
+    chatState.total = d.total;
+    document.getElementById('chatTotalBadge').textContent = d.total + ' 个会话';
+    if (!d.items.length) {
+      tb.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-5">' +
+        '<i class="bi bi-chat-square-text fs-3 d-block mb-2"></i>没有符合条件的问答会话</td></tr>';
+    } else {
+      tb.innerHTML = d.items.map(c => {
+        const firstQ = c.first_q || c.title || '';
+        return '<tr>' +
+          '<td class="text-muted">#' + c.id + '</td>' +
+          '<td class="text-truncate" style="max-width:260px" title="' + Admin.esc(c.title) + '">' +
+            '<a href="javascript:void(0)" class="text-decoration-none" onclick="showChat(' + c.id + ')">' +
+            Admin.esc(c.title) + '</a></td>' +
+          '<td><a href="records.html?tab=chat&username=' + encodeURIComponent(c.username) +
+            '" class="text-decoration-none">' + Admin.esc(c.username) + '</a></td>' +
+          '<td><span class="badge text-bg-info">' + c.msg_count + '</span></td>' +
+          '<td class="text-muted small"><span class="cell-clip" title="' + Admin.esc(firstQ) + '">' +
+            Admin.esc(firstQ) + '</span></td>' +
+          '<td class="text-muted" style="font-size:12px">' + Admin.fmtTime(c.created_at) + '</td>' +
+          '<td class="text-muted" style="font-size:12px">' + Admin.fmtTime(c.updated_at) + '</td>' +
+          '<td><button class="btn btn-sm btn-outline-primary py-0 px-2" ' +
+            'onclick="showChat(' + c.id + ')"><i class="bi bi-eye"></i></button> ' +
+          '<button class="btn btn-sm btn-outline-danger py-0 px-2" ' +
+            'onclick="delChat(' + c.id + ')"><i class="bi bi-trash"></i></button></td>' +
+        '</tr>';
+      }).join('');
+    }
+    renderChatPager();
+  } catch (e) {
+    tb.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">加载失败：' +
+      Admin.esc(e.message) + '</td></tr>';
+  }
+}
+
+function renderChatPager() {
+  const p = Admin.pager(chatState.total, chatState.limit, chatState.offset);
+  document.getElementById('chatPagerBox').innerHTML = p.html;
+  const from = chatState.total ? chatState.offset + 1 : 0;
+  const to = Math.min(chatState.offset + chatState.limit, chatState.total);
+  document.getElementById('chatPageInfo').textContent =
+    '第 ' + from + '-' + to + ' 条 / 共 ' + chatState.total + ' 条 · 第 ' + p.cur + '/' + p.pages + ' 页';
+  p.bind(page => { chatState.offset = (page - 1) * chatState.limit; loadChats(); });
+}
+
+/** 问答详情：以对话气泡还原完整问答 */
+async function showChat(id) {
+  const body = document.getElementById('chatBodyModal');
+  body.innerHTML = '<div class="text-center py-4"><div class="spinner-border"></div></div>';
+  document.getElementById('chatModalId').textContent = '会话 #' + id;
+  chatModal.show();
+  try {
+    const d = await Admin.api('/chats/' + id);
+    const head =
+      '<div class="mb-3 pb-2 border-bottom small">' +
+      '<i class="bi bi-person-circle me-1"></i>' + Admin.esc(d.username) +
+      ' · 创建 ' + Admin.fmtTime(d.created_at) +
+      ' · 最后活动 ' + Admin.fmtTime(d.updated_at) +
+      ' · 共 ' + (d.messages || []).length + ' 条消息</div>';
+
+    const bubbles = (d.messages || []).map(m => {
+      const me = m.role === 'user';
+      const img = m.image_url
+        ? '<img class="bubble-img" src="' + m.image_url + '" alt="提问图片" loading="lazy">' : '';
+      const meta = [];
+      if (!me && m.model) meta.push(m.model);
+      if (!me && m.elapsed_ms) meta.push((m.elapsed_ms / 1000).toFixed(1) + 's');
+      if (meta.length) meta.push('');
+      return '<div class="bubble-row ' + (me ? 'me' : 'ai') + '"><div>' +
+        '<div class="bubble">' + img + Admin.esc(m.content || '') + '</div>' +
+        '<div class="bubble-meta text-end">' + Admin.esc(meta.join(' · ')) +
+          Admin.fmtTime(m.created_at) + '</div>' +
+      '</div></div>';
+    }).join('');
+
+    body.innerHTML = head + (bubbles || '<div class="text-muted text-center py-4">该会话暂无消息</div>') +
+      (d.disclaimer ? '<div class="alert alert-warning py-2 mt-3 mb-0" style="font-size:11.5px">' +
+        Admin.esc(d.disclaimer) + '</div>' : '');
+  } catch (e) {
+    body.innerHTML = '<div class="alert alert-danger">加载失败：' + Admin.esc(e.message) + '</div>';
+  }
+}
+
+async function delChat(id) {
+  const ok = await Admin.confirmBox(
+    '确定删除问答会话 #' + id + ' 吗？该会话的全部消息将一并删除，且不可恢复。', '删除问答会话');
+  if (!ok) return;
+  try {
+    const r = await Admin.api('/chats/' + id, { method: 'DELETE' });
+    if (r.deleted) {
+      Admin.toast('已删除会话 #' + id + '（含 ' + (r.messages || 0) + ' 条消息）');
+      loadChats(); loadBadges();
+    } else {
+      Admin.toast(r.message || '删除失败', 'warning');
+    }
+  } catch (e) {
+    Admin.toast('删除失败：' + e.message, 'danger');
+  }
+}
+
+function syncFilters() {
+  state.label = document.getElementById('f-label').value;
+  state.keyword = document.getElementById('f-keyword').value.trim();
+  state.username = document.getElementById('f-username').value.trim();
+}
+
+function qs() {
+  const p = new URLSearchParams();
+  p.set('limit', state.limit);
+  p.set('offset', state.offset);
+  if (state.label) p.set('label', state.label);
+  if (state.keyword) p.set('keyword', state.keyword);
+  if (state.username) p.set('username', state.username);
+  return p.toString();
+}
+
+async function load() {
+  const tb = document.getElementById('tbody');
+  tb.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">加载中…</td></tr>';
+  try {
+    const d = await Admin.api('/records?' + qs());
+    state.total = d.total;
+    document.getElementById('totalBadge').textContent = d.total + ' 条';
+    if (!d.items.length) {
+      tb.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-5">' +
+        '<i class="bi bi-inbox fs-3 d-block mb-2"></i>没有符合条件的记录</td></tr>';
+    } else {
+      tb.innerHTML = d.items.map(r => {
+        const mal = r.label === 'malignant';
+        const pct = (r.malignant_prob * 100).toFixed(1);
+        return '<tr>' +
+          '<td class="text-muted">#' + r.id + '</td>' +
+          '<td><img class="thumb" src="' + r.image_url + '" loading="lazy" ' +
+            'onerror="this.src=\'data:image/svg+xml;utf8,' +
+            '<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2254%22 height=%2254%22>' +
+            '<rect width=%2254%22 height=%2254%22 fill=%22%23eee%22/>' +
+            '<text x=%2227%22 y=%2230%22 font-size=%229%22 text-anchor=%22middle%22 fill=%22%23999%22>无图</text>' +
+            '</svg>\'" onclick="showDetail(' + r.id + ')"></td>' +
+          '<td class="text-truncate" style="max-width:220px" title="' + Admin.esc(r.filename) + '">' +
+            Admin.esc(r.filename) + '</td>' +
+          '<td><a href="records.html?username=' + encodeURIComponent(r.username) +
+            '" class="text-decoration-none">' + Admin.esc(r.username) + '</a></td>' +
+          '<td><span class="badge ' + (mal ? 'badge-mal' : 'badge-ben') + '">' +
+            Admin.esc(r.label_cn) + '</span></td>' +
+          '<td><div class="prob-bar"><div style="width:' + pct + '%;background:' +
+            (mal ? '#e74c3c' : '#27ae60') + '"></div></div>' +
+            '<span class="ms-1 text-muted" style="font-size:11.5px">' + pct + '%</span></td>' +
+          '<td>' + r.threshold + '</td>' +
+          '<td>' + (r.infer_ms ? r.infer_ms.toFixed(0) + 'ms' : '—') + '</td>' +
+          '<td class="text-muted" style="font-size:12px">' + Admin.fmtTime(r.created_at) + '</td>' +
+          '<td><button class="btn btn-sm btn-outline-primary py-0 px-2" ' +
+            'onclick="showDetail(' + r.id + ')"><i class="bi bi-eye"></i></button> ' +
+          '<button class="btn btn-sm btn-outline-danger py-0 px-2" ' +
+            'onclick="delRecord(' + r.id + ')"><i class="bi bi-trash"></i></button></td>' +
+        '</tr>';
+      }).join('');
+    }
+    renderPager();
+  } catch (e) {
+    tb.innerHTML = '<tr><td colspan="10" class="text-center text-danger py-4">加载失败：' +
+      Admin.esc(e.message) + '</td></tr>';
+  }
+}
+
+function renderPager() {
+  const p = Admin.pager(state.total, state.limit, state.offset);
+  document.getElementById('pagerBox').innerHTML = p.html;
+  const from = state.total ? state.offset + 1 : 0;
+  const to = Math.min(state.offset + state.limit, state.total);
+  document.getElementById('pageInfo').textContent =
+    '第 ' + from + '-' + to + ' 条 / 共 ' + state.total + ' 条 · 第 ' + p.cur + '/' + p.pages + ' 页';
+  p.bind(page => { state.offset = (page - 1) * state.limit; load(); });
+}
+
+async function showDetail(id) {
+  const body = document.getElementById('detailBody');
+  body.innerHTML = '<div class="text-center py-4"><div class="spinner-border"></div></div>';
+  document.getElementById('detailId').textContent = '记录 #' + id;
+  detailModal.show();
+  try {
+    const d = await Admin.api('/records/' + id);
+    const mal = d.label === 'malignant';
+    const adv = d.advice || {};
+    body.innerHTML =
+      '<div class="row g-3">' +
+      '<div class="col-md-5 text-center">' +
+      '<img class="detail-img" src="' + d.image_url + '" alt="检测图像">' +
+      '<div class="text-muted small mt-2 text-truncate" title="' + Admin.esc(d.filename) + '">' +
+      Admin.esc(d.filename) + '</div></div>' +
+      '<div class="col-md-7">' +
+      '<div class="alert ' + (mal ? 'alert-danger' : 'alert-success') + ' py-2 mb-3">' +
+      '<strong><i class="bi bi-' + (mal ? 'exclamation-triangle' : 'shield-check') +
+      '"></i> ' + Admin.esc(d.label_cn) + '</strong>' +
+      '<span class="ms-2 small">置信度 ' + Admin.fmtPct(d.probability) +
+      ' · 阈值 ' + d.threshold + '</span></div>' +
+      '<table class="table table-sm mb-3">' +
+      '<tr><th style="width:110px">所属用户</th><td>' + Admin.esc(d.username) + '</td></tr>' +
+      '<tr><th>恶性概率</th><td>' + Admin.fmtPct(d.malignant_prob) + '</td></tr>' +
+      '<tr><th>良性概率</th><td>' + Admin.fmtPct(d.benign_prob) + '</td></tr>' +
+      '<tr><th>推理耗时</th><td>' + (d.infer_ms ? d.infer_ms.toFixed(1) + ' ms' : '—') + '</td></tr>' +
+      '<tr><th>检测时间</th><td>' + Admin.fmtTime(d.created_at) + '</td></tr>' +
+      (d.note ? '<tr><th>备注</th><td>' + Admin.esc(d.note) + '</td></tr>' : '') +
+      '</table>' +
+      (adv.text ? '<div class="card bg-body-tertiary"><div class="card-body py-2">' +
+        '<div class="fw-semibold small mb-1">健康建议</div>' +
+        '<div class="small text-muted">' + Admin.esc(adv.text) + '</div></div></div>' : '') +
+      '<div class="alert alert-warning py-2 mt-3 mb-0" style="font-size:11.5px">' +
+      Admin.esc(d.disclaimer || '') + '</div>' +
+      '</div></div>';
+  } catch (e) {
+    body.innerHTML = '<div class="alert alert-danger">加载失败：' + Admin.esc(e.message) + '</div>';
+  }
+}
+
+async function delRecord(id) {
+  const ok = await Admin.confirmBox(
+    '确定删除记录 #' + id + ' 吗？该操作会同时删除服务器上的图像文件，且不可恢复。', '删除记录');
+  if (!ok) return;
+  try {
+    const r = await Admin.api('/records/' + id, { method: 'DELETE' });
+    if (r.deleted) {
+      Admin.toast('已删除记录 #' + id);
+      load();
+    } else {
+      Admin.toast(r.message || '删除失败', 'warning');
+    }
+  } catch (e) {
+    Admin.toast('删除失败：' + e.message, 'danger');
+  }
+}
+</script>
+</body>
+</html>

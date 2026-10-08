@@ -1,0 +1,118 @@
+{
+  "config": {
+    "data": "dataset/processed_v2_full",
+    "split": "test",
+    "threshold": 0.5,
+    "tta": true,
+    "models": [
+      "models_v2_full/best.pt",
+      "models_vE_r101_288/best.pt"
+    ]
+  },
+  "singles": {
+    "models_v2_full/best.pt": {
+      "accuracy": 0.8497652582159625,
+      "malignant_recall": 0.8898305084745762,
+      "malignant_precision": 0.8467741935483871,
+      "macro_f1": 0.8677685950413223,
+      "auc": 0.9163247100802855,
+      "confusion_matrix": [
+        [
+          76,
+          19
+        ],
+        [
+          13,
+          105
+        ]
+      ]
+    },
+    "models_vE_r101_288/best.pt": {
+      "accuracy": 0.8497652582159625,
+      "malignant_recall": 0.864406779661017,
+      "malignant_precision": 0.864406779661017,
+      "macro_f1": 0.864406779661017,
+      "auc": 0.9186440677966102,
+      "confusion_matrix": [
+        [
+          79,
+          16
+        ],
+        [
+          16,
+          102
+        ]
+      ]
+    }
+  },
+  "ensemble": {
+    "accuracy": 0.8450704225352113,
+    "malignant_recall": 0.8728813559322034,
+    "malignant_precision": 0.8512396694214877,
+    "macro_f1": 0.8619246861924688,
+    "auc": 0.9287243532560214,
+    "confusion_matrix": [
+      [
+        77,
+        18
+      ],
+      [
+        15,
+        103
+      ]
+    ]
+  },
+  "tta_singles": {
+    "models_v2_full/best.pt": {
+      "accuracy": 0.8497652582159625,
+      "malignant_recall": 0.8898305084745762,
+      "malignant_precision": 0.8467741935483871,
+      "macro_f1": 0.8677685950413223,
+      "auc": 0.9162355040142731,
+      "confusion_matrix": [
+        [
+          76,
+          19
+        ],
+        [
+          13,
+          105
+        ]
+      ]
+    },
+    "models_vE_r101_288/best.pt": {
+      "accuracy": 0.8309859154929577,
+      "malignant_recall": 0.8559322033898306,
+      "malignant_precision": 0.8416666666666667,
+      "macro_f1": 0.8487394957983194,
+      "auc": 0.9169491525423729,
+      "confusion_matrix": [
+        [
+          76,
+          19
+        ],
+        [
+          17,
+          101
+        ]
+      ]
+    }
+  },
+  "ensemble_tta": {
+    "accuracy": 0.8356807511737089,
+    "malignant_recall": 0.847457627118644,
+    "malignant_precision": 0.8547008547008547,
+    "macro_f1": 0.851063829787234,
+    "auc": 0.9241748438893844,
+    "confusion_matrix": [
+      [
+        78,
+        17
+      ],
+      [
+        18,
+        100
+      ]
+    ]
+  }
+}
